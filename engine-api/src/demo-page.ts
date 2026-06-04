@@ -1,6 +1,7 @@
 import { SEED_TRANSCRIPT } from './demo-data'
 
 export function demoPage(): string {
+  const MODEL = process.env.LLM_MODEL ?? 'meta-llama/Llama-3.3-70B-Instruct'
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -98,6 +99,31 @@ export function demoPage(): string {
   .sent{display:flex;align-items:center;gap:12px}
   .sent .big{font-size:30px}
   a.src{color:var(--blue);text-decoration:none}
+
+  /* layout + sidebar */
+  .layout{display:grid;grid-template-columns:1fr 322px;gap:24px;align-items:start;margin-top:8px}
+  @media(max-width:880px){.layout{grid-template-columns:1fr}}
+  .side{position:sticky;top:20px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 16px 8px}
+  .side h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 2px}
+  .side .model{font-size:12px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .side .model code{font-family:'JetBrains Mono',monospace;color:var(--text);font-size:11px}
+  .pill{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px}
+  .pill.live{background:rgba(62,207,142,.14);color:var(--green)}
+  .pill.scripted{background:rgba(245,181,68,.14);color:var(--amber)}
+  .step{display:flex;gap:11px;padding:11px 0;border-top:1px solid rgba(255,255,255,.05);opacity:.55;transition:.2s}
+  .step:first-of-type{border-top:0}
+  .step.active{opacity:1}
+  .step.done{opacity:.9}
+  .step .sdot{flex:0 0 auto;width:20px;height:20px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);margin-top:1px}
+  .step.active .sdot{border-color:var(--amber);color:var(--amber);box-shadow:0 0 0 4px rgba(245,181,68,.1)}
+  .step.done .sdot{border-color:var(--green);color:var(--green);background:rgba(62,207,142,.08)}
+  .step .stitle{font-size:13px;font-weight:600;line-height:1.35}
+  .step .sdesc{font-size:11.5px;color:var(--muted);margin:2px 0 6px}
+  .comps{display:flex;flex-wrap:wrap;gap:5px}
+  .comps span{font-family:'JetBrains Mono',monospace;font-size:9.5px;padding:2px 6px;border-radius:5px;background:var(--panel2);border:1px solid var(--border);color:#aeb6c6}
+  .comps span.policy{color:var(--amber);border-color:var(--amber-dim)}
+  .side .foot{font-size:10.5px;color:var(--muted);padding:12px 0;border-top:1px solid rgba(255,255,255,.05);margin-top:4px}
+  .side .foot code{font-family:'JetBrains Mono',monospace;color:#aeb6c6;font-size:10px}
 </style>
 </head>
 <body>
@@ -111,24 +137,31 @@ export function demoPage(): string {
   <h1>Call → CRM → Proposal → Client email</h1>
   <div class="sub">An agent reads a discovery call and drafts the work. <b>Nothing is written or sent without a human approving it.</b> Two gates: approve the CRM entry, then approve the outbound email.</div>
 
-  <div class="rail" id="rail"></div>
+  <div class="layout">
+    <div class="main">
+      <div class="rail" id="rail"></div>
 
-  <div class="controls">
-    <button class="btn-primary" id="run">Run pipeline on this call</button>
-    <button id="reset" style="display:none">Reset</button>
-    <span class="badge" id="genby" style="display:none"></span>
+      <div class="controls">
+        <button class="btn-primary" id="run">Run pipeline on this call</button>
+        <button id="reset" style="display:none">Reset</button>
+        <span class="badge" id="genby" style="display:none"></span>
+      </div>
+
+      <details id="tdetails" open>
+        <summary>Call transcript (editable — paste a fresh Granola export to demo live)</summary>
+        <textarea id="transcript" spellcheck="false"></textarea>
+      </details>
+
+      <div class="feed" id="feed"></div>
+    </div>
+
+    <aside class="side" id="side"></aside>
   </div>
-
-  <details id="tdetails" open>
-    <summary>Call transcript (editable — paste a fresh Granola export to demo live)</summary>
-    <textarea id="transcript" spellcheck="false"></textarea>
-  </details>
-
-  <div class="feed" id="feed"></div>
 </div>
 
 <script>
 const SEED = ${JSON.stringify(SEED_TRANSCRIPT)};
+const MODEL = ${JSON.stringify(MODEL)};
 const $ = (id)=>document.getElementById(id);
 const esc = (s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 $('transcript').value = SEED;
@@ -139,6 +172,15 @@ const STAGES = [
   {key:'proposal', kind:'run', wf:'proposal-step', label:'Draft proposal + email'},
   {key:'emailGate', kind:'gate', gateFor:'send-step', label:'Send approval', gate:true},
   {key:'send', kind:'run', wf:'send-step', label:'Sent'},
+];
+
+const SIDE_STEPS = [
+  {t:'1 · Call submitted', d:'Consumer POSTs the transcript. The control plane checks policy, records the run, and enqueues the job — in one transaction.', c:['engine-api','pg-boss','engine_runs']},
+  {t:'2 · Agent reads the call', d:'The worker pulls the job and runs the agent runtime: an LLM extracts the opportunity and drafts the CRM entry.', c:['worker','packages/llm']},
+  {t:'3 · Gate 1 · CRM review', d:'Governance opens an approval gate. Nothing is written to the CRM until a human approves — the agent cannot self-approve.', c:['policy','engine_approvals']},
+  {t:'4 · Proposal + email drafted', d:'On approval the control plane dispatches the chained run; the worker drafts the line-item proposal and the client email.', c:['engine-api','worker']},
+  {t:'5 · Gate 2 · Send approval', d:'A second human gate before anything goes out the door — the reputation/money-impacting step.', c:['policy','engine_approvals']},
+  {t:'6 · Sent', d:'The committed action runs (simulated send). Only reachable through an approved gate.', c:['worker','engine_runs']},
 ];
 
 let rootRunId=null, timer=null, lastSig=null;
@@ -222,8 +264,38 @@ function emailCard(em, state, approval){
 
 function workingCard(title){return card('<div class="kicker">working</div><h3><span class="spinner"></span>'+esc(title)+'</h3><div class="muted">agent runtime is drafting…</div>')}
 
+function renderSidebar(state){
+  const side=$('side');
+  // step states: 0 idle, 1 active, 2 done
+  const st=[0,0,0,0,0,0];
+  if(state){
+    const r=state.runsByWf, ap=state.approvals;
+    const intake=r['call-intake'], crm=ap.find(a=>a.workflowId==='proposal-step'),
+          prop=r['proposal-step'], em=ap.find(a=>a.workflowId==='send-step'), send=r['send-step'];
+    if(intake){st[0]=2; st[1]=intake.status==='succeeded'?2:1}
+    if(crm){st[2]=crm.state==='approved'?2:1}
+    if(prop){st[3]=prop.status==='succeeded'?2:1}
+    if(em){st[4]=em.state==='approved'?2:1}
+    if(send){st[5]=send.status==='succeeded'?2:1}
+  }
+  const gb=state?.runsByWf?.['call-intake']?.output?.generatedBy;
+  const modepill = gb==='llm'?'<span class="pill live">live</span>':(gb==='scripted'?'<span class="pill scripted">scripted</span>':'');
+  let h='<h2>How it works · godin-engine</h2>'+
+    '<div class="model">model <code>'+esc(MODEL)+'</code> '+modepill+'</div>';
+  SIDE_STEPS.forEach((s,i)=>{
+    const cls=st[i]===2?'done':(st[i]===1?'active':'');
+    const mark=st[i]===2?'✓':(st[i]===1?'◜':(i+1));
+    h+='<div class="step '+cls+'"><div class="sdot">'+mark+'</div><div>'+
+       '<div class="stitle">'+esc(s.t)+'</div><div class="sdesc">'+esc(s.d)+'</div>'+
+       '<div class="comps">'+s.c.map(c=>'<span'+(c==='policy'?' class="policy"':'')+'>'+esc(c)+'</span>').join('')+'</div></div></div>';
+  });
+  h+='<div class="foot">Governance is a policy engine: <code>quota</code> + <code>approval</code>. Approval = two chained runs joined by a first-class <code>engine_approvals</code> gate. The control plane never runs job code; the worker never enforces policy.</div>';
+  side.innerHTML=h;
+}
+
 function render(state){
   renderRail(state);
+  renderSidebar(state);
   const feed=$('feed'); feed.innerHTML='';
   if(!state) return;
   const intake=state.runsByWf['call-intake'];
@@ -279,6 +351,7 @@ window.approve=async(id)=>{await fetch('/demo/api/approvals/'+id+'/approve',{met
 window.reject=async(id)=>{await fetch('/demo/api/approvals/'+id+'/reject',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({decided_by:'Carlos (owner)'})});await poll();};
 $('reset').onclick=()=>{location.reload()};
 renderRail(null);
+renderSidebar(null);
 </script>
 </body>
 </html>`
