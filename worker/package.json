@@ -14,7 +14,8 @@
     "@godin-engine/db": "workspace:*",
     "@godin-engine/queue": "workspace:*",
     "@godin-engine/workflows": "workspace:*",
-    "drizzle-orm": "^0.38.2"
+    "drizzle-orm": "^0.38.2",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
