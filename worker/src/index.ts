@@ -7,6 +7,8 @@ import { getWorkflow } from '@godin-engine/workflows'
 
 /** Up to this many jobs run concurrently per poll (the thesis's "parallel slots"). */
 const TEAM_SIZE = 5
+// Note: this service's Railway Watch Paths must include the shared packages
+// (workflows/, packages/**) or it won't rebuild when a workflow changes.
 
 function makeLogger(runId: string): RunContext['logger'] {
   return {
