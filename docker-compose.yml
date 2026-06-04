@@ -1,0 +1,23 @@
+# The engine's OWN Postgres (D-1) — separate from gbrain's DB.
+# Host port 5434 to avoid colliding with gbrain (5433).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: godin-engine-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: godin_engine
+    ports:
+      - "5434:5432"
+    volumes:
+      - godin-engine-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d godin_engine"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  godin-engine-pg-data:
