@@ -1,0 +1,19 @@
+{
+  "name": "@godin-engine/queue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg-boss": "^10.1.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

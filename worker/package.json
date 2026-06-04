@@ -1,0 +1,22 @@
+{
+  "name": "@godin-engine/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@godin-engine/contract": "workspace:*",
+    "@godin-engine/db": "workspace:*",
+    "@godin-engine/queue": "workspace:*",
+    "@godin-engine/workflows": "workspace:*",
+    "drizzle-orm": "^0.38.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

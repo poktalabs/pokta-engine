@@ -1,0 +1,27 @@
+{
+  "name": "godin-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.26.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build",
+    "dev:api": "pnpm --filter @godin-engine/engine-api dev",
+    "dev:worker": "pnpm --filter @godin-engine/worker dev",
+    "db:generate": "pnpm --filter @godin-engine/db db:generate",
+    "db:migrate": "pnpm --filter @godin-engine/db db:migrate",
+    "db:push": "pnpm --filter @godin-engine/db db:push"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}
