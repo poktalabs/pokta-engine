@@ -22,7 +22,9 @@ export function llmInfo(): { baseURL: string; model: string; configured: boolean
 let client: OpenAI | null = null
 function getClient(): OpenAI {
   if (!llmConfigured()) throw new Error('LLM not configured (set LLM_API_KEY / NEBIUS_API_KEY)')
-  if (!client) client = new OpenAI({ apiKey: API_KEY, baseURL: BASE_URL, timeout: 45_000, maxRetries: 1 })
+  // Timeout must sit BELOW the workflow timeoutMs so a slow call throws here and
+  // the workflow falls back to scripted, instead of the worker hard-killing the run.
+  if (!client) client = new OpenAI({ apiKey: API_KEY, baseURL: BASE_URL, timeout: 100_000, maxRetries: 0 })
   return client
 }
 

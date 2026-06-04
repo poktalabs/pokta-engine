@@ -71,7 +71,7 @@ export async function run(input: IntakeArtifact, ctx: RunContext): Promise<Propo
     const data = await completeJSON<{ proposal: Proposal; email: ClientEmail }>({
       system: SYSTEM,
       user: `Extraction:\n${JSON.stringify(input.extraction, null, 2)}\n\nApproved CRM entry:\n${JSON.stringify(input.crmEntry, null, 2)}`,
-      maxTokens: 1400,
+      maxTokens: 1100,
     })
     return { crmCommitted: true, crmEntry: input.crmEntry, proposal: data.proposal, email: data.email, generatedBy: 'llm' }
   } catch (e) {

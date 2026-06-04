@@ -343,6 +343,8 @@ function emailCard(em, state, approval){
 }
 
 function workingCard(title){return card('<div class="kicker">working</div><h3><span class="spinner"></span>'+esc(title)+'</h3><div class="muted">agent runtime is drafting…</div>')}
+function errCard(title,err){return card('<div class="kicker" style="color:var(--red)">step failed</div><h3>'+esc(title)+'</h3><div class="muted">'+esc((err&&err.message)||'the step did not complete')+'</div>')}
+function isWorking(s){return s==='queued'||s==='running'}
 
 function renderDrawer(state){
   const body=$('drawerBody');
@@ -405,11 +407,13 @@ function render(state){
   if(gb){const b=$('genby');b.style.display='';b.className='badge '+(gb==='llm'?'live':'scripted');
     b.textContent=gb==='llm'?'drafted live by LLM':'scripted demo content';}
 
-  if(intake && intake.status!=='succeeded' || (!intake)) feed.appendChild(workingCard('Reading the call & extracting the opportunity'));
+  if(intake?.status==='failed') feed.appendChild(errCard('Reading the call failed', intake.error));
+  else if(!intake || isWorking(intake.status)) feed.appendChild(workingCard('Reading the call & extracting the opportunity'));
   if(crmGate) feed.appendChild(crmCard(crmGate.artifact?.crmEntry||intake?.output?.crmEntry||{}, crmGate.state, crmGate));
   else if(intake?.status==='succeeded' && intake.output?.crmEntry) feed.appendChild(crmCard(intake.output.crmEntry,'',{}));
 
-  if(prop && prop.status!=='succeeded') feed.appendChild(workingCard('Drafting the proposal & client email'));
+  if(prop?.status==='failed') feed.appendChild(errCard('Drafting the proposal failed', prop.error));
+  else if(prop && isWorking(prop.status)) feed.appendChild(workingCard('Drafting the proposal & client email'));
   const proposal = prop?.output?.proposal || emailGate?.artifact?.proposal;
   if(proposal) feed.appendChild(proposalCard(proposal));
 

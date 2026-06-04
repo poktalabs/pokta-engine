@@ -10,7 +10,7 @@ const manifest: WorkflowManifest<{ transcript: string; source?: string }> = {
   id: 'call-intake',
   version: '0.1.0',
   runtime: 'agent',
-  timeoutMs: 60_000,
+  timeoutMs: 120_000,
   policy: [{ kind: 'approval', approver: 'role:owner', onApprove: 'proposal-step' }],
   input: z.object({ transcript: z.string().min(1), source: z.string().optional() }),
 }

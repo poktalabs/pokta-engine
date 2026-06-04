@@ -11,7 +11,7 @@ const manifest: WorkflowManifest = {
   id: 'proposal-step',
   version: '0.1.0',
   runtime: 'agent',
-  timeoutMs: 60_000,
+  timeoutMs: 120_000,
   policy: [{ kind: 'approval', approver: 'role:owner', onApprove: 'send-step' }],
   input: z
     .object({

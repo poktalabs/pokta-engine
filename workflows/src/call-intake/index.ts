@@ -72,7 +72,7 @@ export async function run(input: { transcript: string; source?: string }, ctx: R
     const data = await completeJSON<{ extraction: Extraction; crmEntry: CrmEntry }>({
       system: SYSTEM,
       user: `Call transcript:\n\n${input.transcript}`,
-      maxTokens: 1200,
+      maxTokens: 900,
     })
     ctx.logger.info('call-intake: extracted + drafted CRM entry via LLM')
     return { source, extraction: data.extraction, crmEntry: data.crmEntry, generatedBy: 'llm' }
