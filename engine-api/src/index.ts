@@ -9,6 +9,7 @@ import { db, schema } from '@godin-engine/db'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { approvalTargets, getWorkflow } from '@godin-engine/workflows'
 import { serviceKeyAuth } from './auth'
+import { mountDemo } from './demo'
 
 const gatedTargets = approvalTargets()
 
@@ -24,6 +25,9 @@ function fail(c: Context, err: EngineError) {
 const app = new Hono()
 
 app.get('/', (c) => c.json({ service: 'godin-engine engine-api', version: '0.1.0', ok: true }))
+
+// Demo console (no X-Service-Key; its own surface). Mounted before /v1 auth.
+mountDemo(app)
 
 app.use('/v1/*', serviceKeyAuth())
 

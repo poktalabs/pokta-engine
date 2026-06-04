@@ -1,5 +1,5 @@
 {
-  "name": "@godin-engine/workflows",
+  "name": "@godin-engine/llm",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,7 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@godin-engine/contract": "workspace:*",
-    "@godin-engine/llm": "workspace:*",
-    "zod": "^3.24.1"
+    "openai": "^4.104.0"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

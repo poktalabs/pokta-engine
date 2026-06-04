@@ -10,10 +10,21 @@ import { run as echoDraftRun } from './echo-draft'
 import echoSendManifest from './echo-send/manifest'
 import { run as echoSendRun } from './echo-send'
 
+// Vino pipeline (call → CRM → proposal → email), the demo's real workflows.
+import callIntakeManifest from './call-intake/manifest'
+import { run as callIntakeRun } from './call-intake'
+import proposalStepManifest from './proposal-step/manifest'
+import { run as proposalStepRun } from './proposal-step'
+import sendStepManifest from './send-step/manifest'
+import { run as sendStepRun } from './send-step'
+
 const modules: WorkflowModule[] = [
   { manifest: echoManifest, run: echoRun as WorkflowModule['run'] },
   { manifest: echoDraftManifest, run: echoDraftRun as WorkflowModule['run'] },
   { manifest: echoSendManifest, run: echoSendRun as WorkflowModule['run'] },
+  { manifest: callIntakeManifest, run: callIntakeRun as WorkflowModule['run'] },
+  { manifest: proposalStepManifest, run: proposalStepRun as WorkflowModule['run'] },
+  { manifest: sendStepManifest, run: sendStepRun as WorkflowModule['run'] },
 ]
 
 export const registry: ReadonlyMap<string, WorkflowModule> = new Map(
