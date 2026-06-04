@@ -1,5 +1,58 @@
 import { SEED_TRANSCRIPT } from './demo-data'
 
+function escH(s: unknown): string {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string)
+}
+function ts(v: unknown): string {
+  if (!v) return ''
+  try { return new Date(v as string).toISOString().replace('T', ' ').slice(0, 19) } catch { return String(v) }
+}
+
+/** Read-only ops view — real rows from engine_runs / engine_approvals. */
+export function demoOpsPage(runs: any[], approvals: any[]): string {
+  const sc = (s: string) => s === 'succeeded' || s === 'approved' ? '#3ecf8e' : s === 'failed' || s === 'rejected' ? '#f2606b' : s === 'running' || s === 'pending' ? '#f5b544' : '#8b94a6'
+  const runRows = runs.map((r) => `<tr>
+    <td><code>${escH(r.workflowId)}</code></td>
+    <td><span style="color:${sc(r.status)}">${escH(r.status)}</span></td>
+    <td>${escH(r.consumerId)}</td>
+    <td class="mono">${escH((r.runId || '').slice(0, 8))}</td>
+    <td class="mono">${escH((r.parentRunId || '').slice(0, 8))}</td>
+    <td class="muted">${escH(ts(r.createdAt))}</td></tr>`).join('')
+  const apRows = approvals.map((a) => `<tr>
+    <td><code>${escH(a.workflowId)}</code></td>
+    <td><span style="color:${sc(a.state)}">${escH(a.state)}</span></td>
+    <td>${escH(a.approver)}</td>
+    <td>${escH(a.decidedBy || '—')}</td>
+    <td class="mono">${escH((a.sourceRunId || '').slice(0, 8))}</td>
+    <td class="muted">${escH(ts(a.createdAt))}</td></tr>`).join('')
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>godin-engine · ops</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#0b0d12;color:#e7ebf2;font-family:Inter,system-ui,sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:28px 22px 60px}
+  a{color:#5b9bff;text-decoration:none}
+  h1{font-size:20px;margin:0 0 2px}h1 b{color:#f5b544}
+  .sub{color:#8b94a6;font-size:13px;margin-bottom:22px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:#8b94a6;margin:26px 0 8px}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:#14181f;border:1px solid #232a36;border-radius:12px;overflow:hidden}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8b94a6;padding:10px 12px;border-bottom:1px solid #232a36}
+  td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)}
+  tr:last-child td{border-bottom:0}
+  code,.mono{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#aeb6c6}
+  .muted{color:#8b94a6}
+  .empty{color:#8b94a6;font-size:13px;padding:14px}
+</style></head><body><div class="wrap">
+  <h1>godin<b>·</b>engine — ops</h1>
+  <div class="sub">Read-only. Live rows from the engine's own Postgres. <a href="/demo">← back to demo</a></div>
+  <h2>Runs · engine_runs</h2>
+  <table><tr><th>workflow</th><th>status</th><th>consumer</th><th>run</th><th>parent</th><th>created (UTC)</th></tr>${runRows || '<tr><td class="empty" colspan="6">no runs yet</td></tr>'}</table>
+  <h2 id="approvals">Approval gates · engine_approvals</h2>
+  <table><tr><th>onApprove →</th><th>state</th><th>approver</th><th>decided by</th><th>source run</th><th>created (UTC)</th></tr>${apRows || '<tr><td class="empty" colspan="6">no gates yet</td></tr>'}</table>
+</div></body></html>`
+}
+
 export function demoPage(): string {
   const MODEL = process.env.LLM_MODEL ?? 'meta-llama/Llama-3.3-70B-Instruct'
   return `<!doctype html>
@@ -100,30 +153,47 @@ export function demoPage(): string {
   .sent .big{font-size:30px}
   a.src{color:var(--blue);text-decoration:none}
 
-  /* layout + sidebar */
-  .layout{display:grid;grid-template-columns:1fr 322px;gap:24px;align-items:start;margin-top:8px}
-  @media(max-width:880px){.layout{grid-template-columns:1fr}}
-  .side{position:sticky;top:20px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 16px 8px}
-  .side h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 2px}
-  .side .model{font-size:12px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-  .side .model code{font-family:'JetBrains Mono',monospace;color:var(--text);font-size:11px}
+  /* drawer */
+  .drawer-toggle{position:fixed;top:16px;left:16px;z-index:40;background:var(--panel);border:1px solid var(--border);color:var(--text);font-weight:600;font-size:13px;padding:9px 14px;border-radius:10px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.35);transition:.15s}
+  .drawer-toggle:hover{border-color:var(--amber);color:var(--amber)}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:.25s;z-index:45}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;left:0;height:100%;width:412px;max-width:92vw;background:var(--panel);border-right:1px solid var(--border);transform:translateX(-104%);transition:transform .3s cubic-bezier(.4,0,.2,1);z-index:50;overflow-y:auto;padding:22px 20px 44px;box-shadow:10px 0 50px rgba(0,0,0,.45)}
+  .drawer.open{transform:none}
+  .drawer-close{position:absolute;top:12px;right:12px;background:transparent;border:0;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:4px 8px}
+  .drawer-close:hover{color:var(--text)}
+  .drawer h2{font-size:17px;margin:0 0 3px;letter-spacing:-.01em}
+  .drawer .lead{font-size:12.5px;color:var(--muted);margin-bottom:14px}
+  .model{font-size:12px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .model code{font-family:'JetBrains Mono',monospace;color:var(--text);font-size:11px}
+  .legend{display:flex;gap:16px;font-size:11px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
   .pill{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px}
   .pill.live{background:rgba(62,207,142,.14);color:var(--green)}
   .pill.scripted{background:rgba(245,181,68,.14);color:var(--amber)}
-  .step{display:flex;gap:11px;padding:11px 0;border-top:1px solid rgba(255,255,255,.05);opacity:.55;transition:.2s}
-  .step:first-of-type{border-top:0}
+  .sech{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:18px 0 4px}
+  .step{display:flex;gap:11px;padding:11px 0;border-top:1px solid rgba(255,255,255,.05);opacity:.72;transition:.2s}
   .step.active{opacity:1}
-  .step.done{opacity:.9}
+  .step.done{opacity:.95}
   .step .sdot{flex:0 0 auto;width:20px;height:20px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);margin-top:1px}
   .step.active .sdot{border-color:var(--amber);color:var(--amber);box-shadow:0 0 0 4px rgba(245,181,68,.1)}
   .step.done .sdot{border-color:var(--green);color:var(--green);background:rgba(62,207,142,.08)}
-  .step .stitle{font-size:13px;font-weight:600;line-height:1.35}
+  .step .stitle{font-size:13px;font-weight:600;line-height:1.35;display:flex;align-items:center;gap:8px}
   .step .sdesc{font-size:11.5px;color:var(--muted);margin:2px 0 6px}
+  .tag{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;white-space:nowrap}
+  .tag.impl{background:rgba(62,207,142,.14);color:var(--green)}
+  .tag.integ{background:rgba(91,155,255,.16);color:var(--blue)}
   .comps{display:flex;flex-wrap:wrap;gap:5px}
   .comps span{font-family:'JetBrains Mono',monospace;font-size:9.5px;padding:2px 6px;border-radius:5px;background:var(--panel2);border:1px solid var(--border);color:#aeb6c6}
   .comps span.policy{color:var(--amber);border-color:var(--amber-dim)}
-  .side .foot{font-size:10.5px;color:var(--muted);padding:12px 0;border-top:1px solid rgba(255,255,255,.05);margin-top:4px}
-  .side .foot code{font-family:'JetBrains Mono',monospace;color:#aeb6c6;font-size:10px}
+  .dlink{display:inline-block;margin-top:7px;font-size:11.5px;color:var(--blue);text-decoration:none}
+  .dlink:hover{text-decoration:underline}
+  .ipoint{display:flex;gap:11px;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}
+  .ipoint .ico{flex:0 0 auto;font-size:16px;margin-top:1px}
+  .ipoint .it{font-weight:600;font-size:12.5px}
+  .ipoint .idesc{color:var(--muted);font-size:11.5px}
+  .ipoint .itoday{color:var(--blue);font-size:10.5px;margin-top:2px}
+  .dfoot{font-size:10.5px;color:var(--muted);margin-top:18px;border-top:1px solid rgba(255,255,255,.06);padding-top:12px}
+  .dfoot code{font-family:'JetBrains Mono',monospace;color:#aeb6c6;font-size:10px}
 </style>
 </head>
 <body>
@@ -137,27 +207,28 @@ export function demoPage(): string {
   <h1>Call → CRM → Proposal → Client email</h1>
   <div class="sub">An agent reads a discovery call and drafts the work. <b>Nothing is written or sent without a human approving it.</b> Two gates: approve the CRM entry, then approve the outbound email.</div>
 
-  <div class="layout">
-    <div class="main">
-      <div class="rail" id="rail"></div>
+  <div class="rail" id="rail"></div>
 
-      <div class="controls">
-        <button class="btn-primary" id="run">Run pipeline on this call</button>
-        <button id="reset" style="display:none">Reset</button>
-        <span class="badge" id="genby" style="display:none"></span>
-      </div>
-
-      <details id="tdetails" open>
-        <summary>Call transcript (editable — paste a fresh Granola export to demo live)</summary>
-        <textarea id="transcript" spellcheck="false"></textarea>
-      </details>
-
-      <div class="feed" id="feed"></div>
-    </div>
-
-    <aside class="side" id="side"></aside>
+  <div class="controls">
+    <button class="btn-primary" id="run">Run pipeline on this call</button>
+    <button id="reset" style="display:none">Reset</button>
+    <span class="badge" id="genby" style="display:none"></span>
   </div>
+
+  <details id="tdetails" open>
+    <summary>Call transcript (editable — paste a fresh Granola export to demo live)</summary>
+    <textarea id="transcript" spellcheck="false"></textarea>
+  </details>
+
+  <div class="feed" id="feed"></div>
 </div>
+
+<button id="drawerToggle" class="drawer-toggle" title="What's happening under the hood">&#9432; How it works</button>
+<div id="scrim" class="scrim"></div>
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <button id="drawerClose" class="drawer-close" aria-label="Close">&times;</button>
+  <div id="drawerBody"></div>
+</aside>
 
 <script>
 const SEED = ${JSON.stringify(SEED_TRANSCRIPT)};
@@ -174,13 +245,22 @@ const STAGES = [
   {key:'send', kind:'run', wf:'send-step', label:'Sent'},
 ];
 
-const SIDE_STEPS = [
-  {t:'1 · Call submitted', d:'Consumer POSTs the transcript. The control plane checks policy, records the run, and enqueues the job — in one transaction.', c:['engine-api','pg-boss','engine_runs']},
-  {t:'2 · Agent reads the call', d:'The worker pulls the job and runs the agent runtime: an LLM extracts the opportunity and drafts the CRM entry.', c:['worker','packages/llm']},
-  {t:'3 · Gate 1 · CRM review', d:'Governance opens an approval gate. Nothing is written to the CRM until a human approves — the agent cannot self-approve.', c:['policy','engine_approvals']},
-  {t:'4 · Proposal + email drafted', d:'On approval the control plane dispatches the chained run; the worker drafts the line-item proposal and the client email.', c:['engine-api','worker']},
-  {t:'5 · Gate 2 · Send approval', d:'A second human gate before anything goes out the door — the reputation/money-impacting step.', c:['policy','engine_approvals']},
-  {t:'6 · Sent', d:'The committed action runs (simulated send). Only reachable through an approved gate.', c:['worker','engine_runs']},
+// Each step is implemented in the engine. 'link' points to the live ops view.
+const FLOW_STEPS = [
+  {t:'1 · Call submitted', d:'Consumer POSTs the transcript. The control plane checks policy, records the run, and enqueues the job in one transaction.', c:['engine-api','pg-boss','engine_runs'], link:{l:'See the run record →', h:'/demo/ops'}},
+  {t:'2 · Agent reads the call', d:'The worker pulls the job and runs the agent runtime: the LLM extracts the opportunity and drafts the CRM entry.', c:['worker','packages/llm']},
+  {t:'3 · Gate 1 · CRM review', d:'Governance opens an approval gate. Nothing is written until a human approves — the agent cannot self-approve.', c:['policy','engine_approvals'], link:{l:'See the approval gate →', h:'/demo/ops#approvals'}},
+  {t:'4 · Proposal + email drafted', d:'On approval the control plane dispatches the chained run; the worker drafts the proposal and client email.', c:['engine-api','worker']},
+  {t:'5 · Gate 2 · Send approval', d:'A second human gate before anything leaves — the reputation / money-impacting step.', c:['policy','engine_approvals'], link:{l:'See the approval gate →', h:'/demo/ops#approvals'}},
+  {t:'6 · Sent', d:'The committed action runs. Only reachable through an approved gate.', c:['worker','engine_runs'], link:{l:'See the run lifecycle →', h:'/demo/ops'}},
+];
+
+// Where YOUR systems plug in (not built — clean seams for the engagement).
+const INTEGRATIONS = [
+  {ico:'📞', t:'Call ingest', d:'Granola / Twilio webhook → transcript into the engine', today:'today: you paste the transcript'},
+  {ico:'🗂️', t:'CRM write', d:'GoHighLevel / JobTread / SmartSuite write on approval', today:'today: drafted, not written (simulated)'},
+  {ico:'✉️', t:'Client send', d:'Email / SMS via Resend / Twilio on approval', today:'today: no message actually sent (simulated)'},
+  {ico:'👤', t:'Approver identity', d:'Your SSO / auth decides who may approve a gate', today:'today: recorded, not authenticated'},
 ];
 
 let rootRunId=null, timer=null, lastSig=null;
@@ -264,10 +344,9 @@ function emailCard(em, state, approval){
 
 function workingCard(title){return card('<div class="kicker">working</div><h3><span class="spinner"></span>'+esc(title)+'</h3><div class="muted">agent runtime is drafting…</div>')}
 
-function renderSidebar(state){
-  const side=$('side');
-  // step states: 0 idle, 1 active, 2 done
-  const st=[0,0,0,0,0,0];
+function renderDrawer(state){
+  const body=$('drawerBody');
+  const st=[0,0,0,0,0,0]; // 0 idle, 1 active, 2 done
   if(state){
     const r=state.runsByWf, ap=state.approvals;
     const intake=r['call-intake'], crm=ap.find(a=>a.workflowId==='proposal-step'),
@@ -279,23 +358,40 @@ function renderSidebar(state){
     if(send){st[5]=send.status==='succeeded'?2:1}
   }
   const gb=state?.runsByWf?.['call-intake']?.output?.generatedBy;
-  const modepill = gb==='llm'?'<span class="pill live">live</span>':(gb==='scripted'?'<span class="pill scripted">scripted</span>':'');
-  let h='<h2>How it works · godin-engine</h2>'+
-    '<div class="model">model <code>'+esc(MODEL)+'</code> '+modepill+'</div>';
-  SIDE_STEPS.forEach((s,i)=>{
+  const modepill = gb==='llm'?'<span class="pill live">drafting live</span>':(gb==='scripted'?'<span class="pill scripted">scripted fallback</span>':'');
+  let h='<h2>Under the hood</h2>'+
+    '<div class="lead">What\\'s running in <b>godin-engine</b> vs. where your systems plug in.</div>'+
+    '<div class="model">LLM <code>'+esc(MODEL)+'</code> '+modepill+'</div>'+
+    '<div class="legend"><span><span class="tag impl">IMPLEMENTED</span> in the engine</span><span><span class="tag integ">INTEGRATION</span> your system</span></div>'+
+    '<div class="sech">Pipeline — implemented in godin-engine</div>';
+  FLOW_STEPS.forEach((s,i)=>{
     const cls=st[i]===2?'done':(st[i]===1?'active':'');
     const mark=st[i]===2?'✓':(st[i]===1?'◜':(i+1));
-    h+='<div class="step '+cls+'"><div class="sdot">'+mark+'</div><div>'+
-       '<div class="stitle">'+esc(s.t)+'</div><div class="sdesc">'+esc(s.d)+'</div>'+
-       '<div class="comps">'+s.c.map(c=>'<span'+(c==='policy'?' class="policy"':'')+'>'+esc(c)+'</span>').join('')+'</div></div></div>';
+    h+='<div class="step '+cls+'"><div class="sdot">'+mark+'</div><div style="flex:1">'+
+       '<div class="stitle">'+esc(s.t)+'<span class="tag impl">live</span></div>'+
+       '<div class="sdesc">'+esc(s.d)+'</div>'+
+       '<div class="comps">'+s.c.map(c=>'<span'+(c==='policy'?' class="policy"':'')+'>'+esc(c)+'</span>').join('')+'</div>'+
+       (s.link?'<a class="dlink" href="'+s.link.h+'" target="_blank" rel="noopener">'+esc(s.link.l)+'</a>':'')+
+       '</div></div>';
   });
-  h+='<div class="foot">Governance is a policy engine: <code>quota</code> + <code>approval</code>. Approval = two chained runs joined by a first-class <code>engine_approvals</code> gate. The control plane never runs job code; the worker never enforces policy.</div>';
-  side.innerHTML=h;
+  h+='<div class="sech">Where your systems connect</div>';
+  INTEGRATIONS.forEach(p=>{
+    h+='<div class="ipoint"><div class="ico">'+p.ico+'</div><div><div class="it">'+esc(p.t)+' <span class="tag integ">integration</span></div>'+
+       '<div class="idesc">'+esc(p.d)+'</div><div class="itoday">'+esc(p.today)+'</div></div></div>';
+  });
+  h+='<div class="dfoot">Governance is a policy engine: <code>quota</code> + <code>approval</code>. A gate is two chained runs joined by a first-class <code>engine_approvals</code> record. The control plane never runs job code; the worker never enforces policy. <a class="dlink" href="/demo/ops" target="_blank" rel="noopener">Open the ops dashboard →</a></div>';
+  body.innerHTML=h;
+}
+
+function openDrawer(o){
+  $('drawer').classList.toggle('open',o);
+  $('scrim').classList.toggle('open',o);
+  $('drawer').setAttribute('aria-hidden', o?'false':'true');
 }
 
 function render(state){
   renderRail(state);
-  renderSidebar(state);
+  renderDrawer(state);
   const feed=$('feed'); feed.innerHTML='';
   if(!state) return;
   const intake=state.runsByWf['call-intake'];
@@ -350,8 +446,12 @@ $('run').onclick=async()=>{
 window.approve=async(id)=>{await fetch('/demo/api/approvals/'+id+'/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({decided_by:'Carlos (owner)'})});await poll();};
 window.reject=async(id)=>{await fetch('/demo/api/approvals/'+id+'/reject',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({decided_by:'Carlos (owner)'})});await poll();};
 $('reset').onclick=()=>{location.reload()};
+$('drawerToggle').onclick=()=>openDrawer(!$('drawer').classList.contains('open'));
+$('drawerClose').onclick=()=>openDrawer(false);
+$('scrim').onclick=()=>openDrawer(false);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')openDrawer(false)});
 renderRail(null);
-renderSidebar(null);
+renderDrawer(null);
 </script>
 </body>
 </html>`

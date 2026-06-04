@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { desc, eq, inArray, sql } from 'drizzle-orm'
 import { EngineError } from '@godin-engine/contract'
 import { db, schema } from '@godin-engine/db'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { getWorkflow } from '@godin-engine/workflows'
-import { demoPage } from './demo-page'
+import { demoPage, demoOpsPage } from './demo-page'
 
 const CONSUMER = 'demo'
 
@@ -89,6 +89,12 @@ async function approveGate(approvalId: string, decidedBy: string): Promise<strin
 
 export function mountDemo(app: Hono): void {
   app.get('/demo', (c) => c.html(demoPage()))
+
+  app.get('/demo/ops', async (c) => {
+    const runs = await db.select().from(schema.engineRuns).orderBy(desc(schema.engineRuns.createdAt)).limit(30)
+    const approvals = await db.select().from(schema.engineApprovals).orderBy(desc(schema.engineApprovals.createdAt)).limit(30)
+    return c.html(demoOpsPage(runs, approvals))
+  })
 
   app.post('/demo/api/run', async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as { transcript?: string; source?: string }
