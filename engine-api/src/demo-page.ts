@@ -141,7 +141,16 @@ const STAGES = [
   {key:'send', kind:'run', wf:'send-step', label:'Sent'},
 ];
 
-let rootRunId=null, timer=null;
+let rootRunId=null, timer=null, lastSig=null;
+
+function stateSig(s){
+  const r=s.runsByWf||{};
+  return JSON.stringify({
+    i:r['call-intake']?.status, g:r['call-intake']?.output?.generatedBy,
+    p:r['proposal-step']?.status, s:r['send-step']?.status,
+    a:(s.approvals||[]).map(x=>[x.workflowId,x.state])
+  });
+}
 
 function runStatusClass(st){return st==='succeeded'?'done':(st==='running'?'work':(st==='failed'?'err':(st==='queued'?'work':'idle')))}
 function gateStatusClass(state){return state==='approved'?'done':(state==='pending'?'wait':(state==='rejected'?'err':'idle'))}
@@ -248,7 +257,9 @@ async function poll(){
   if(!rootRunId) return;
   try{
     const r=await fetch('/demo/api/state/'+rootRunId); if(!r.ok) return;
-    const state=await r.json(); render(state);
+    const state=await r.json();
+    const sig=stateSig(state);
+    if(sig!==lastSig){ lastSig=sig; render(state); }   // only repaint on real change
     if(state.runsByWf['send-step']?.status==='succeeded'){clearInterval(timer);timer=null;}
   }catch(e){}
 }
@@ -259,7 +270,7 @@ $('run').onclick=async()=>{
   const r=await fetch('/demo/api/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({transcript})});
   const j=await r.json();
   if(j.error){alert(j.error);$('run').disabled=false;$('run').textContent='Run pipeline on this call';return;}
-  rootRunId=j.rootRunId;
+  rootRunId=j.rootRunId; lastSig=null;
   $('tdetails').open=false; $('run').style.display='none'; $('reset').style.display='';
   render(null);
   await poll(); timer=setInterval(poll,1500);
