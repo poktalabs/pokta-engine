@@ -10,6 +10,7 @@ import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { approvalTargets, getWorkflow } from '@godin-engine/workflows'
 import { serviceKeyAuth } from './auth'
 import { mountDemo } from './demo'
+import { mountDashboard } from './dashboard'
 
 const gatedTargets = approvalTargets()
 
@@ -28,6 +29,9 @@ app.get('/', (c) => c.json({ service: 'godin-engine engine-api', version: '0.1.0
 
 // Demo console (no X-Service-Key; its own surface). Mounted before /v1 auth.
 mountDemo(app)
+
+// Operator dashboard (read-only, own surface — D4). Also pre-/v1-auth.
+mountDashboard(app)
 
 app.use('/v1/*', serviceKeyAuth())
 
