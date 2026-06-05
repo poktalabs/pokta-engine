@@ -11,6 +11,7 @@ import { approvalTargets, getWorkflow } from '@godin-engine/workflows'
 import { serviceKeyAuth } from './auth'
 import { mountDemo } from './demo'
 import { mountDashboard } from './dashboard'
+import { mountConsole } from './console'
 
 const gatedTargets = approvalTargets()
 
@@ -32,6 +33,9 @@ mountDemo(app)
 
 // Operator dashboard (read-only, own surface — D4). Also pre-/v1-auth.
 mountDashboard(app)
+
+// Operator console — alternate left-nav UI, kept beside /dashboard. Read-only.
+mountConsole(app)
 
 app.use('/v1/*', serviceKeyAuth())
 
