@@ -12,6 +12,8 @@
  *   RESEND_TO       — demo recipient override (optional; defaults to email.to)
  */
 
+import { Resend } from 'resend'
+
 const API_KEY = process.env.RESEND_API_KEY ?? ''
 const FROM = process.env.RESEND_FROM ?? ''
 const TO_OVERRIDE = process.env.RESEND_TO ?? ''
@@ -35,12 +37,27 @@ export interface SentMessage {
   messageId: string
 }
 
+let client: Resend | null = null
+function getClient(): Resend {
+  if (!resendConfigured()) throw new Error('Resend not configured (set RESEND_API_KEY / RESEND_FROM)')
+  if (!client) client = new Resend(API_KEY)
+  return client
+}
+
 /**
  * Send an email via Resend. THROWS when unconfigured or on API error — the
- * caller catches and records the failure (D3). Implemented by Lane B.
- * When RESEND_TO is set it overrides the recipient (demo safety).
+ * caller catches and records the failure (D3). When RESEND_TO is set it
+ * overrides the recipient (demo safety — keeps test sends off real inboxes).
  */
-export async function sendEmail(_input: EmailInput): Promise<SentMessage> {
-  if (!resendConfigured()) throw new Error('Resend not configured (set RESEND_API_KEY / RESEND_FROM)')
-  throw new Error('sendEmail not implemented yet (Phase 0 stub — TASK-002)')
+export async function sendEmail(input: EmailInput): Promise<SentMessage> {
+  const to = TO_OVERRIDE || input.to
+  const { data, error } = await getClient().emails.send({
+    from: FROM,
+    to,
+    subject: input.subject,
+    text: input.body,
+  })
+  if (error) throw new Error(`Resend send failed: ${error.message}`)
+  if (!data?.id) throw new Error('Resend send returned no message id')
+  return { messageId: data.id }
 }
