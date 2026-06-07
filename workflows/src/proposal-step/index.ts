@@ -1,5 +1,6 @@
-import type { RunContext } from '@godin-engine/contract'
+import type { IntegrationResult, RunContext } from '@godin-engine/contract'
 import { completeJSON } from '@godin-engine/llm'
+import { commitCrmEntry } from '@godin-engine/notion'
 import type { CrmEntry, Extraction } from '../call-intake'
 
 export interface ProposalLineItem {
@@ -26,6 +27,7 @@ export interface ClientEmail {
 export interface ProposalOutput {
   crmCommitted: true
   crmEntry: CrmEntry
+  crmResult: IntegrationResult
   proposal: Proposal
   email: ClientEmail
   generatedBy: 'llm' | 'scripted'
@@ -65,18 +67,57 @@ function scripted(crm: CrmEntry, ex: Extraction): { proposal: Proposal; email: C
   }
 }
 
+/**
+ * Commit the approved CRM entry to Notion. Fail-soft (D3): on any failure this
+ * records a `status:'failed'` IntegrationResult and returns — it NEVER throws, so
+ * the drafted proposal survives and gate 2 still opens.
+ */
+async function commitCrm(crm: CrmEntry, ctx: RunContext): Promise<IntegrationResult> {
+  const at = new Date().toISOString()
+  try {
+    const { pageId, url } = await commitCrmEntry({
+      account: crm.account,
+      contactName: crm.contactName,
+      opportunityName: crm.opportunityName,
+      stage: crm.stage,
+      estimatedValue: crm.estimatedValue,
+      summary: crm.summary,
+      tags: crm.tags,
+    })
+    ctx.logger.info(`proposal-step: CRM row written to Notion (${pageId})`)
+    return { provider: 'notion', status: 'ok', ref: pageId, url, at }
+  } catch (e) {
+    const error = (e as Error).message
+    ctx.logger.info(`proposal-step: Notion CRM write failed (${error}); continuing fail-soft`)
+    return { provider: 'notion', status: 'failed', error, at }
+  }
+}
+
 export async function run(input: IntakeArtifact, ctx: RunContext): Promise<ProposalOutput> {
-  ctx.logger.info('proposal-step: CRM entry committed (simulated); drafting proposal + email')
+  // 1. Draft the proposal + email FIRST. This is the artifact gate 2 reviews;
+  //    it must never be discarded by a downstream CRM failure.
+  let proposal: Proposal
+  let email: ClientEmail
+  let generatedBy: 'llm' | 'scripted'
   try {
     const data = await completeJSON<{ proposal: Proposal; email: ClientEmail }>({
       system: SYSTEM,
       user: `Extraction:\n${JSON.stringify(input.extraction, null, 2)}\n\nApproved CRM entry:\n${JSON.stringify(input.crmEntry, null, 2)}`,
       maxTokens: 1100,
     })
-    return { crmCommitted: true, crmEntry: input.crmEntry, proposal: data.proposal, email: data.email, generatedBy: 'llm' }
+    proposal = data.proposal
+    email = data.email
+    generatedBy = 'llm'
   } catch (e) {
     ctx.logger.info(`proposal-step: LLM unavailable (${(e as Error).message}); using scripted draft`)
     const s = scripted(input.crmEntry, input.extraction)
-    return { crmCommitted: true, crmEntry: input.crmEntry, proposal: s.proposal, email: s.email, generatedBy: 'scripted' }
+    proposal = s.proposal
+    email = s.email
+    generatedBy = 'scripted'
   }
+
+  // 2. Commit the approved CRM entry to Notion (post gate-1). Fail-soft.
+  const crmResult = await commitCrm(input.crmEntry, ctx)
+
+  return { crmCommitted: true, crmEntry: input.crmEntry, crmResult, proposal, email, generatedBy }
 }
