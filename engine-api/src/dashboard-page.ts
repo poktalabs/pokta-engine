@@ -50,6 +50,8 @@ export function dashboardPage(): string {
   .pill.ok,.pill.succeeded,.pill.approved{background:rgba(62,207,142,.14);color:var(--green)}
   .pill.failed,.pill.rejected{background:rgba(242,96,107,.14);color:var(--red)}
   .pill.pending,.pill.running,.pill.queued{background:rgba(245,181,68,.14);color:var(--amber)}
+  .pill.simulated{background:rgba(139,148,166,.16);color:var(--muted)}
+  .simnote{color:var(--muted);font-size:11px;margin-top:3px}
   /* node graph */
   .rail{display:flex;align-items:stretch;gap:0;background:var(--panel);border:1px solid var(--border);
     border-radius:14px;padding:18px 10px;overflow-x:auto}
@@ -163,12 +165,15 @@ function renderApprovals(aps){
 
 function outcomeRow(o){
   const failed=o.status==='failed';
-  // D3: run can be green while outcome is red. Render both, distinctly.
+  const simulated=o.status==='simulated';
+  // D3: run can be green while outcome is red. Render all three distinctly.
   let artifact='—';
   if(o.provider==='notion'&&o.url) artifact='<a href="'+esc(o.url)+'" target="_blank" rel="noopener">open Notion page →</a>';
   else if(o.url) artifact='<a href="'+esc(o.url)+'" target="_blank" rel="noopener">open →</a>';
   const outcomeCell=failed
     ?'<span class="pill failed">failed</span><div class="errmsg">'+esc(o.error||'integration failed')+'</div><span class="retry">↻ retry needed</span>'
+    :simulated
+    ?'<span class="pill simulated">simulated</span><div class="simnote">no provider key — side effect skipped</div>'
     :'<span class="pill ok">ok</span>';
   return '<tr'+(failed?' class="outcome-fail"':'')+'>'+
     '<td>'+esc(o.provider)+'</td>'+

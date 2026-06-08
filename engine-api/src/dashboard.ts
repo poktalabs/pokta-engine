@@ -206,7 +206,7 @@ function asIntegrationResult(v: unknown): IntegrationResult | null {
   const o = v as Record<string, unknown>
   if (
     (o.provider === 'notion' || o.provider === 'resend') &&
-    (o.status === 'ok' || o.status === 'failed')
+    (o.status === 'ok' || o.status === 'failed' || o.status === 'simulated')
   ) {
     return o as unknown as IntegrationResult
   }

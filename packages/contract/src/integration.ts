@@ -11,10 +11,15 @@
  *
  * A `status: 'failed'` result on a `succeeded` run is the normal fail-soft case;
  * the dashboard renders it distinctly (red outcome, run still green).
+ *
+ * `status: 'simulated'` means the integration is wired but **not configured**
+ * (no provider key in this deployment) — the side effect was skipped, not failed.
+ * This is the modular default: integrations ship in the code and activate when
+ * their keys are present. The dashboard renders it neutrally, never as an error.
  */
 export interface IntegrationResult {
   provider: 'notion' | 'resend'
-  status: 'ok' | 'failed'
+  status: 'ok' | 'failed' | 'simulated'
   /** External id of the created artifact: Notion pageId | Resend messageId. */
   ref?: string
   /** Human-openable URL when the provider has one (e.g. the Notion page). */

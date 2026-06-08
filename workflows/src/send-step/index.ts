@@ -30,6 +30,12 @@ export async function run(input: { email: ClientEmail }, ctx: RunContext): Promi
     return { sent: true, to: input.email.to, subject: input.email.subject, sendResult }
   } catch (e) {
     const error = (e as Error).message
+    // "not configured" = no Resend key in this deployment → simulated, not failed.
+    if (/not configured/i.test(error)) {
+      ctx.logger.info('send-step: Resend not configured; recording simulated send outcome')
+      const sendResult: IntegrationResult = { provider: 'resend', status: 'simulated', at }
+      return { sent: false, to: input.email.to, subject: input.email.subject, sendResult }
+    }
     ctx.logger.error(`send-step: Resend send failed (${error}); recording fail-soft outcome`)
     const sendResult: IntegrationResult = { provider: 'resend', status: 'failed', error, at }
     return { sent: false, to: input.email.to, subject: input.email.subject, sendResult }

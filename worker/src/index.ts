@@ -9,7 +9,7 @@ import { getWorkflow } from '@godin-engine/workflows'
 const TEAM_SIZE = 5
 // Note: this service's Railway Watch Paths must include the shared packages
 // (workflows/, packages/**) or it won't rebuild when a workflow changes.
-// (rebuild marker: llm timeout + workflow timeoutMs tuning)
+// (rebuild marker: integrations simulate when unconfigured — keyless-safe prod)
 
 function makeLogger(runId: string): RunContext['logger'] {
   return {

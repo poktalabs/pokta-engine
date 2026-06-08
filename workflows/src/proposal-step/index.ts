@@ -88,6 +88,11 @@ async function commitCrm(crm: CrmEntry, ctx: RunContext): Promise<IntegrationRes
     return { provider: 'notion', status: 'ok', ref: pageId, url, at }
   } catch (e) {
     const error = (e as Error).message
+    // "not configured" = no Notion key in this deployment → simulated, not failed.
+    if (/not configured/i.test(error)) {
+      ctx.logger.info('proposal-step: Notion not configured; recording simulated CRM outcome')
+      return { provider: 'notion', status: 'simulated', at }
+    }
     ctx.logger.info(`proposal-step: Notion CRM write failed (${error}); continuing fail-soft`)
     return { provider: 'notion', status: 'failed', error, at }
   }
