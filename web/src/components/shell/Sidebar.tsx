@@ -10,6 +10,7 @@ import {
 import type { ComponentType } from 'react'
 import { cn } from '@/lib/utils'
 import { useTenant } from '@/providers/TenantProvider'
+import { useT } from '@/i18n'
 
 /**
  * Left nav (P1). Tenant-scoped routes (`/:tenant/...`); active link gets the
@@ -33,19 +34,20 @@ export interface SidebarProps {
 
 export function Sidebar({ pendingApprovals = 0 }: SidebarProps) {
   const tenant = useTenant()
+  const t = useT()
   const base = `/${tenant.id}`
 
   const items: NavItem[] = [
-    { to: `${base}/workflows`, label: 'Workflows', Icon: Workflow },
+    { to: `${base}/workflows`, label: t('shell.nav.workflows'), Icon: Workflow },
     {
       to: `${base}/approvals`,
-      label: 'Approvals',
+      label: t('shell.nav.approvals'),
       Icon: CheckSquare,
       badge: pendingApprovals,
     },
-    { to: `${base}/integrations`, label: 'Integrations', Icon: Plug },
-    { to: `${base}/reports`, label: 'Reports', Icon: FileBarChart },
-    { to: `${base}/settings`, label: 'Settings', Icon: SettingsIcon },
+    { to: `${base}/integrations`, label: t('shell.nav.integrations'), Icon: Plug },
+    { to: `${base}/reports`, label: t('shell.nav.reports'), Icon: FileBarChart },
+    { to: `${base}/settings`, label: t('shell.nav.settings'), Icon: SettingsIcon },
   ]
 
   return (

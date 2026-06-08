@@ -3,6 +3,7 @@ import { ChevronDown, UserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TenantHeader } from '@/components/shell/TenantHeader'
 import { LocaleToggle } from '@/components/shell/LocaleToggle'
+import { useT } from '@/i18n'
 
 /**
  * Sticky top bar (P1): co-branding lockup on the left, locale toggle + user menu
@@ -13,6 +14,7 @@ import { LocaleToggle } from '@/components/shell/LocaleToggle'
  */
 export function TopBar() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const t = useT()
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--rule)] bg-[var(--background)]">
@@ -31,7 +33,7 @@ export function TopBar() {
               className="flex cursor-pointer items-center gap-2 border border-[var(--rule)] bg-[var(--surface)] px-2.5 py-1.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface-2)]"
             >
               <UserRound className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Operator</span>
+              <span className="hidden sm:inline">{t('shell.user.operator')}</span>
               <ChevronDown
                 className={cn('size-3.5 transition-transform', menuOpen && 'rotate-180')}
                 aria-hidden="true"
@@ -44,7 +46,7 @@ export function TopBar() {
                 className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-48 border border-[var(--rule)] bg-[var(--surface)] shadow-[4px_4px_0_0_var(--color-ink)]"
               >
                 <div className="border-b border-[var(--border)] px-3 py-2.5 text-xs text-[var(--muted-foreground)]">
-                  Signed in as
+                  {t('shell.user.signedInAs')}
                   <div className="font-medium text-[var(--foreground)]">operator@tenant</div>
                 </div>
                 <button
@@ -53,7 +55,7 @@ export function TopBar() {
                   className="w-full cursor-pointer px-3 py-2.5 text-left text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--surface-2)]"
                   onClick={() => setMenuOpen(false)}
                 >
-                  Sign out
+                  {t('shell.user.signOut')}
                 </button>
               </div>
             )}

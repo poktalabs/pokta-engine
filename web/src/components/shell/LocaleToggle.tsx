@@ -1,19 +1,18 @@
-import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { useLocale, useT, type Locale } from '@/i18n'
 
 /**
- * EN / ES-MX segmented locale control (P1).
+ * EN / ES-MX segmented locale control (P1, wired in P7).
  *
  * Visual treatment from the landing page `LangToggle`: sharp, hairline-bordered,
  * active locale FILLED with Secondary (Midnight Violet) + light text. A11y:
  * `role="radiogroup"` with `role="radio"` + `aria-checked` options (M2 a11y DoD).
  *
- * P7 wires this to the real `useLanguage()` toggle + string catalogs. Until then
- * it holds local state so the control is interactive in the shell.
+ * Wired (P7): reads/writes the real active locale via the `@/i18n` `LocaleProvider`
+ * (localStorage-persisted). `value`/`onChange` remain available for controlled use.
  */
-export type Locale = 'en' | 'es-MX'
 
-const LOCALES: { value: Locale; label: string }[] = [
+const OPTIONS: { value: Locale; label: string }[] = [
   { value: 'en', label: 'EN' },
   { value: 'es-MX', label: 'ES' },
 ]
@@ -25,22 +24,22 @@ export interface LocaleToggleProps {
 }
 
 export function LocaleToggle({ value, onChange, className }: LocaleToggleProps) {
-  // Uncontrolled fallback for P1 (P7 makes this controlled via LanguageProvider).
-  const [internal, setInternal] = useState<Locale>('en')
-  const active = value ?? internal
+  const { locale, setLocale } = useLocale()
+  const t = useT()
+  const active = value ?? locale
 
   const select = (next: Locale) => {
     if (onChange) onChange(next)
-    else setInternal(next)
+    else setLocale(next)
   }
 
   return (
     <div
       role="radiogroup"
-      aria-label="Language"
+      aria-label={t('shell.locale.label')}
       className={cn('inline-flex items-center border border-[var(--rule)]', className)}
     >
-      {LOCALES.map((loc, i) => {
+      {OPTIONS.map((loc, i) => {
         const isActive = loc.value === active
         return (
           <button
