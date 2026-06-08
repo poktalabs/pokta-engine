@@ -1,42 +1,59 @@
 import { Suspense, lazy } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { DEFAULT_TENANT } from '@/providers/TenantProvider'
 
 /**
- * Route tree skeleton (P0). Pages are lazy-loaded behind `<Suspense>`; P0 ships
- * placeholder pages so the shell boots and routing works. P1-B fills the full
- * tenant-scoped tree (Shell + `/:tenant/{workflows,approvals,integrations,...}`)
- * — this file is the route owner from P1-B onward.
+ * Route tree (P1-B owns this file). The tenant-agnostic Shell mounts under
+ * `/:tenant`; surfaces are lazy-loaded behind `<Suspense>`. The tenant segment
+ * scopes the URL — the active TenantProvider (in AppProviders) drives config /
+ * theming. M2 defaults to Mi Pase; flipping the provider swaps lockup + nav with
+ * zero CSS change (P4-Z).
+ *
+ * Later phases fill the page bodies (P2 Approvals, P3 Workflows/Runs, P4
+ * Integrations/Reports/Settings) — the route shape is frozen here.
  */
-const PlaceholderPage = lazy(() => import('@/pages/Placeholder'))
+const AppShell = lazy(() =>
+  import('@/components/shell/AppShell').then((m) => ({ default: m.AppShell })),
+)
+const Approvals = lazy(() => import('@/pages/Approvals'))
+const Workflows = lazy(() => import('@/pages/Workflows'))
+const Integrations = lazy(() => import('@/pages/Integrations'))
+const Reports = lazy(() => import('@/pages/Reports'))
+const Settings = lazy(() => import('@/pages/Settings'))
+const DetailPlaceholder = lazy(() => import('@/pages/DetailPlaceholder'))
+const NotFound = lazy(() => import('@/pages/NotFound'))
 
 const router = createBrowserRouter([
   {
     path: '/',
-    // P1-B replaces this with the tenant default redirect / Shell layout route.
-    element: <Navigate to="/approvals" replace />,
+    element: <Navigate to={`/${DEFAULT_TENANT}/approvals`} replace />,
   },
   {
-    path: '/approvals',
-    element: <PlaceholderPage title="Approvals" />,
-  },
-  {
-    path: '/workflows',
-    element: <PlaceholderPage title="Workflows" />,
+    path: '/:tenant',
+    element: <AppShell />,
+    children: [
+      { index: true, element: <Navigate to="approvals" replace /> },
+      { path: 'approvals', element: <Approvals /> },
+      { path: 'workflows', element: <Workflows /> },
+      { path: 'workflows/:id', element: <DetailPlaceholder kind="Workflow" /> },
+      { path: 'runs/:id', element: <DetailPlaceholder kind="Run" /> },
+      { path: 'integrations', element: <Integrations /> },
+      { path: 'reports', element: <Reports /> },
+      { path: 'reports/:id', element: <DetailPlaceholder kind="Report" /> },
+      { path: 'settings', element: <Settings /> },
+    ],
   },
   {
     path: '*',
-    element: <PlaceholderPage title="Not found" />,
+    element: <NotFound />,
   },
 ])
-
-const RouteFallback = () => (
-  <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>Loading…</div>
-)
 
 /** The router root, nested as the innermost element by `AppProviders`. */
 export function AppRouter() {
   return (
-    <Suspense fallback={<RouteFallback />}>
+    <Suspense fallback={<LoadingState />}>
       <RouterProvider router={router} />
     </Suspense>
   )
