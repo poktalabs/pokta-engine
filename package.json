@@ -10,6 +10,8 @@
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev:api": "pnpm --filter @godin-engine/engine-api dev",
     "dev:worker": "pnpm --filter @godin-engine/worker dev",
     "db:generate": "pnpm --filter @godin-engine/db db:generate",
@@ -19,6 +21,7 @@
   "devDependencies": {
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
     "@types/node": "^22.10.2"
   },
   "pnpm": {

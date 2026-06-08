@@ -420,8 +420,14 @@ function render(state){
   if(emailGate){const ec=emailCard(emailGate.artifact?.email||prop?.output?.email||{}, emailGate.state, emailGate); if(ec) feed.appendChild(ec);}
 
   if(send?.status==='succeeded'){
-    feed.appendChild(card('<div class="sent"><span class="big">✅</span><div><h3 style="margin:0">Email sent to '+esc(send.output?.to||'client')+'</h3>'+
-      '<div class="muted">'+esc(send.output?.subject||'')+' · '+esc(send.output?.note||'')+'</div></div></div>'));
+    var sr=send.output?.sendResult||{};
+    var note=sr.status==='ok'?'delivered via Resend ('+esc(sr.ref||'')+')'
+      :sr.status==='simulated'?'simulated — no email provider configured'
+      :sr.status==='failed'?'send failed: '+esc(sr.error||'')
+      :'';
+    var head=sr.status==='simulated'?'Approved &amp; ready to send':'Email sent to '+esc(send.output?.to||'client');
+    feed.appendChild(card('<div class="sent"><span class="big">'+(sr.status==='failed'?'⚠️':'✅')+'</span><div><h3 style="margin:0">'+head+'</h3>'+
+      '<div class="muted">'+esc(send.output?.subject||'')+(note?' · '+note:'')+'</div></div></div>'));
   }
 }
 
