@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/*
+  P0 placeholder stylesheet. P1-A0 (the design-system gate) OWNS this file and
+  replaces it with the full token wiring:
+    @plugin "@tailwindcss/typography";
+    @import "<repo design-system>/tokens.css";
+    @import "<repo design-system>/status-tokens.css";
+    Fontsource font imports (@fontsource-variable/{source-serif-4,manrope,funnel-display});
+    @theme inline { --font-serif / --font-sans / --font-funnel } + radius-0 enforcement.
+  Do NOT @import light-form-fields.css / risk-tiers.css until P1-C lands them.
+*/
