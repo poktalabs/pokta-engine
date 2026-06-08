@@ -14,6 +14,11 @@ function makeCtx(): RunContext {
     traceId: 'trace_1',
     logger: { info: vi.fn(), error: vi.fn() },
     artifactDir: '/tmp/run_1',
+    // send-step uses the @godin-engine/resend module directly, not ctx.integration;
+    // a throwing stub satisfies the RunContext shape (D2) without being exercised.
+    integration: (name: string) => {
+      throw new Error(`integration('${name}') not stubbed in this test`)
+    },
   }
 }
 

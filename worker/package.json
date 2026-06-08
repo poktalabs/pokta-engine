@@ -12,7 +12,9 @@
   "dependencies": {
     "@godin-engine/contract": "workspace:*",
     "@godin-engine/db": "workspace:*",
+    "@godin-engine/mercadolibre": "workspace:*",
     "@godin-engine/queue": "workspace:*",
+    "@godin-engine/shopify": "workspace:*",
     "@godin-engine/workflows": "workspace:*",
     "drizzle-orm": "^0.38.2",
     "tsx": "^4.19.2"

@@ -88,6 +88,12 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/mercadolibre:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/notion:
     dependencies:
       '@notionhq/client':
@@ -118,6 +124,12 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/shopify:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   worker:
     dependencies:
       '@godin-engine/contract':
@@ -126,9 +138,15 @@ importers:
       '@godin-engine/db':
         specifier: workspace:*
         version: link:../packages/db
+      '@godin-engine/mercadolibre':
+        specifier: workspace:*
+        version: link:../packages/mercadolibre
       '@godin-engine/queue':
         specifier: workspace:*
         version: link:../packages/queue
+      '@godin-engine/shopify':
+        specifier: workspace:*
+        version: link:../packages/shopify
       '@godin-engine/workflows':
         specifier: workspace:*
         version: link:../workflows
@@ -148,15 +166,27 @@ importers:
       '@godin-engine/contract':
         specifier: workspace:*
         version: link:../packages/contract
+      '@godin-engine/db':
+        specifier: workspace:*
+        version: link:../packages/db
       '@godin-engine/llm':
         specifier: workspace:*
         version: link:../packages/llm
+      '@godin-engine/mercadolibre':
+        specifier: workspace:*
+        version: link:../packages/mercadolibre
       '@godin-engine/notion':
         specifier: workspace:*
         version: link:../packages/notion
       '@godin-engine/resend':
         specifier: workspace:*
         version: link:../packages/resend
+      '@godin-engine/shopify':
+        specifier: workspace:*
+        version: link:../packages/shopify
+      drizzle-orm:
+        specifier: ^0.38.2
+        version: 0.38.4(pg@8.21.0)(postgres@3.4.9)(react@19.2.7)
       zod:
         specifier: ^3.24.1
         version: 3.25.76
