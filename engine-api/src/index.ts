@@ -7,13 +7,15 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { EngineError } from '@godin-engine/contract'
 import { db, schema } from '@godin-engine/db'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
-import { approvalTargets, getWorkflow } from '@godin-engine/workflows'
+import { gatedTargets as gatedTargetsOf, getWorkflow } from '@godin-engine/workflows'
 import { serviceKeyAuth } from './auth'
 import { mountDemo } from './demo'
 import { mountDashboard } from './dashboard'
 import { mountConsole } from './console'
 
-const gatedTargets = approvalTargets()
+// Child-only workflows: approval (`onApprove`) + onComplete targets. A direct
+// POST to any of these is refused — they are reachable only as child runs.
+const gatedTargets = gatedTargetsOf()
 
 async function enqueue(runId: string): Promise<void> {
   const boss = await getBoss()

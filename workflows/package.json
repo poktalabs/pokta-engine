@@ -7,14 +7,18 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p pricing/tsconfig.json --noEmit",
+    "build": "tsc --noEmit && tsc -p pricing/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@godin-engine/contract": "workspace:*",
+    "@godin-engine/db": "workspace:*",
     "@godin-engine/llm": "workspace:*",
+    "@godin-engine/mercadolibre": "workspace:*",
     "@godin-engine/notion": "workspace:*",
     "@godin-engine/resend": "workspace:*",
+    "@godin-engine/shopify": "workspace:*",
+    "drizzle-orm": "^0.38.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {

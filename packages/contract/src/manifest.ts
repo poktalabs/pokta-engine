@@ -18,6 +18,15 @@ export interface WorkflowManifest<I = unknown> {
   timeoutMs: number
   policy: Policy[]
   input: z.ZodType<I>
+  /**
+   * Optional auto-chaining (D1). On this run's SUCCESS the worker dispatches the
+   * named workflow as a NEW child run (`parentRunId` = this run, input = this
+   * run's output) with NO approval gate — symmetric to an approval policy's
+   * `onApprove`, but ungated. A workflow may declare BOTH an `onComplete` (auto
+   * child) and an approval `policy` (gated child); both fire on success,
+   * independently.
+   */
+  onComplete?: string
 }
 
 export type RunFn<I = unknown, O = unknown> = (input: I, ctx: RunContext) => Promise<O>
