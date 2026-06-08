@@ -1,0 +1,63 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Pokta Labs · godin-engine workspace — STATUS token layer (app-only)
+   Resolves the design-system gap: the brand palette has no semantic status
+   colors, but the dashboard needs run/approval status (applied / needs-review
+   / failed / rejected / live). Decided 2026-06-08 (Mel): OK = #19A662 (a new,
+   brand-tuned green), warn = brand amber, fail = brand brick-ember.
+
+   Layers ON TOP of tokens.css. Import after it. SEMANTIC use only — always pair
+   the color with an icon + text label (brand rule: never meaning by color alone).
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* the one genuinely new brand color: success / applied / approved / connected */
+  --color-success: #19A662;
+}
+
+:root {
+  /* semantic status roles (light is the locked workspace base) */
+  --status-ok:    var(--color-success);   /* applied · approved · live · within-policy */
+  --status-warn:  var(--color-primary);   /* needs review · held at gate  (brand amber)  */
+  --status-fail:  var(--color-accent);    /* failed · rejected · risk     (brick ember)  */
+  --status-idle:  var(--muted-foreground);/* no-change · draft · queued   (muted ink)    */
+  --status-info:  var(--color-secondary); /* neutral / informational      (midnight violet) */
+
+  /* pill tints — derived, so they track the role colors. 12% fill / 28% border. */
+  --status-ok-bg:    color-mix(in srgb, var(--status-ok)   12%, var(--color-paper));
+  --status-ok-line:  color-mix(in srgb, var(--status-ok)   28%, transparent);
+  --status-warn-bg:  color-mix(in srgb, var(--status-warn) 14%, var(--color-paper));
+  --status-warn-line:color-mix(in srgb, var(--status-warn) 32%, transparent);
+  --status-fail-bg:  color-mix(in srgb, var(--status-fail) 10%, var(--color-paper));
+  --status-fail-line:color-mix(in srgb, var(--status-fail) 26%, transparent);
+  --status-idle-bg:  color-mix(in srgb, var(--color-ink)    6%, var(--color-paper));
+  --status-idle-line:var(--border);
+}
+
+/* On the deliberate dark band, lift the success/fail so they read on Midnight Violet. */
+[data-theme="dark"] {
+  --status-ok:   color-mix(in srgb, var(--color-success) 70%, var(--color-white-soft));
+  --status-fail: var(--color-primary); /* red is too dark on navy; amber carries "stop" there */
+}
+
+/* ─── Status pill (SHARP — radius 0, hairline, brand-consistent) ──────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;                 /* room for the icon */
+  padding: 0.125rem 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;          /* 11px */
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent; /* radius 0 inherited — no rounding */
+}
+.pill-ok   { color: var(--status-ok);   background: var(--status-ok-bg);   border-color: var(--status-ok-line); }
+.pill-warn { color: var(--status-warn); background: var(--status-warn-bg); border-color: var(--status-warn-line); }
+.pill-fail { color: var(--status-fail); background: var(--status-fail-bg); border-color: var(--status-fail-line); }
+.pill-idle { color: var(--status-idle); background: var(--status-idle-bg); border-color: var(--status-idle-line); }
+
+/* Status dot/tick — a SQUARE (brand tick is never a round dot). */
+.status-tick { width: 0.375rem; height: 0.375rem; display: inline-block; }
+.status-tick-ok   { background: var(--status-ok); }
+.status-tick-warn { background: var(--status-warn); }
+.status-tick-fail { background: var(--status-fail); }

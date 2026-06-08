@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+/* ─── Pokta Labs palette ────────────────────────────────────────────────
+   https://coolors.co/05010a-0a051a-0e092a-c11816-ff9900-efebfa-f4f2f9-f8f8f8
+   black #05010A · foreground #0A051A · secondary #0E092A · accent #C11816
+   primary #FF9900 · card/surface-1 #EFEBFA · background #F4F2F9 · white #F8F8F8
+   Print / scientific-journal system inherited from Pokta Care, now on a
+   deep-navy + lavender base with RED as the accent and ORANGE as the
+   primary. Sharp corners, hairline rules, paper grain. */
+@theme {
+  --color-ink-black:  #05010A;  /* black, reference only */
+  --color-ink:        #0A051A;  /* foreground / main text */
+  --color-secondary:  #0E092A;  /* secondary (Midnight Violet, deep navy) */
+  --color-accent:     #C11816;  /* accent (Brick Ember) */
+  --color-primary:    #FF9900;  /* primary (Amber Glow) */
+  --color-light:      #EFEBFA;  /* card / surface-1 (Lavender Mist) */
+  --color-paper:      #F4F2F9;  /* background (Ghost White) */
+  --color-white-soft: #F8F8F8;  /* white (Bright Snow), reference only */
+
+  --font-serif: "Source Serif 4 Variable", Georgia, "Times New Roman", serif;
+  --font-sans:  "Manrope Variable", system-ui, -apple-system, sans-serif;
+  --font-funnel: "Funnel Display Variable", "Funnel Display", system-ui, sans-serif;
+}
+
+/* ─── Light theme (locked default) ──────────────────────────────────────
+   Shape system: SHARP (radius 0) everywhere, hairline rules, square frames. */
+:root {
+  --background:         var(--color-paper);
+  --surface:            var(--color-white-soft);
+  --surface-2:          var(--color-light);
+  --foreground:         var(--color-ink);
+  --foreground-soft:    color-mix(in srgb, var(--color-ink) 66%, var(--color-paper));
+  --muted-foreground:   color-mix(in srgb, var(--color-ink) 45%, var(--color-paper));
+  --primary:            var(--color-primary);    /* orange */
+  --primary-foreground: var(--color-ink-black);  /* dark text on orange (~9:1) */
+  --accent-text:        var(--color-accent);   /* red is legible as text on the light base (~5.5:1) */
+  --spot:               var(--color-primary);    /* orange as the secondary pop */
+  --rule:               var(--color-ink);        /* crisp print hairlines */
+  --border:             color-mix(in srgb, var(--color-ink) 15%, transparent);
+}
+
+/* ─── Deliberate dark band(s) only (CTA). Not a page-wide theme. ───────── */
+.dark,
+[data-theme="dark"] {
+  --background:         var(--color-ink-black);
+  --surface:            var(--color-ink);
+  --surface-2:          var(--color-secondary);
+  --foreground:         var(--color-white-soft);
+  --foreground-soft:    color-mix(in srgb, var(--color-white-soft) 76%, var(--color-ink-black));
+  --muted-foreground:   var(--color-light);
+  --primary:            var(--color-primary);    /* orange */
+  --primary-foreground: var(--color-ink-black);  /* dark text on orange */
+  --accent-text:        var(--color-primary);    /* orange pops on deep navy (red too dark there) */
+  --spot:               var(--color-accent);
+  --rule:               color-mix(in srgb, var(--color-white-soft) 26%, transparent);
+  --border:             color-mix(in srgb, var(--color-white-soft) 16%, transparent);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-text);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+}
+
+/* ─── Paper grain (print texture). Fixed, non-interactive, GPU-cheap. ──── */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ─── Motion (MOTION_INTENSITY 4): gentle fade-up on scroll-enter ─────── */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-reveal].is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ─── Tactile buttons: hard-offset ink stamp (neo-brutalist) ──────────── */
+/* Rest 4px -> hover 6px (lifts toward cursor) -> press 0 (sinks flat). Border
+   is a constant ink regardless of shadow color. cursor:pointer so the native
+   <button> submit matches the link buttons. */
+.btn {
+  font-family: var(--font-funnel);
+  cursor: pointer;
+  border: 1.5px solid var(--color-ink);
+  box-shadow: 4px 4px 0 0 var(--color-ink);
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.12s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 0.2s ease;
+}
+.btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--color-ink);
+}
+.btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 var(--color-ink);
+}
+
+/* Nav sits in a compact 68px bar: lighter 3px rest so it does not shout. */
+header .btn { box-shadow: 3px 3px 0 0 var(--color-ink); }
+header .btn:hover { box-shadow: 5px 5px 0 0 var(--color-ink); }
+header .btn:active { box-shadow: 0 0 0 0 var(--color-ink); }
+
+/* Dark CTA band: ink/light offsets both read wrong on Midnight Violet. Keep the
+   amber button and stamp it in Brick Ember accent red (red reads cleanly as a
+   solid block; its "too dark for text on navy" caveat is about text, not fills). */
+[data-theme="dark"] .btn { box-shadow: 4px 4px 0 0 var(--color-accent); }
+[data-theme="dark"] .btn:hover { box-shadow: 6px 6px 0 0 var(--color-accent); }
+[data-theme="dark"] .btn:active { box-shadow: 0 0 0 0 var(--color-accent); }
+
+/* Motion guard: keep the offset, drop the slide. */
+@media (prefers-reduced-motion: reduce) {
+  .btn { transition: box-shadow 0.12s ease; }
+  .btn:hover, .btn:active { transform: none; }
+}
+
+/* ─── Editorial helpers ───────────────────────────────────────────────── */
+.kicker {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.col-rule { border-color: var(--border); }
