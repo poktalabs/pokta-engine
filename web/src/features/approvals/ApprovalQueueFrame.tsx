@@ -262,7 +262,13 @@ export function ApprovalQueueFrame({
         </div>
       ) : null}
 
-      {/* Batch action bar — sticky so it stays reachable over a long queue. */}
+      {/*
+        Action bar — sticky so it stays reachable over a long queue. The audit
+        toggle is always available; the decision buttons are suppressed when the
+        renderer owns its own action surface (`ownsActionBar`) so the batch /
+        single-action renderers' bars never duplicate the frame's. The frame
+        still surfaces "Retry failed" universally (it owns the failed-id list).
+      */}
       {state !== 'empty' && !isTerminal && (
         <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-4 border border-[var(--rule)] bg-[var(--background)] px-4 py-3">
           <div className="flex items-center gap-3 text-sm text-[var(--foreground-soft)]">
@@ -281,23 +287,27 @@ export function ApprovalQueueFrame({
                 Retry failed ({failedItemIds.length})
               </Button>
             )}
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => onReject()}
-              disabled={submitting || selectedCount === 0}
-            >
-              <X className="size-4" aria-hidden="true" />
-              Reject
-            </Button>
-            <Button
-              size="sm"
-              onClick={onApproveAll}
-              disabled={submitting || selectedCount === 0}
-            >
-              <Check className="size-4" aria-hidden="true" />
-              {submitting ? 'Applying…' : `Approve ${selectedCount} & apply`}
-            </Button>
+            {!renderer.ownsActionBar && (
+              <>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => onReject()}
+                  disabled={submitting || selectedCount === 0}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  Reject
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={onApproveAll}
+                  disabled={submitting || selectedCount === 0}
+                >
+                  <Check className="size-4" aria-hidden="true" />
+                  {submitting ? 'Applying…' : `Approve ${selectedCount} & apply`}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

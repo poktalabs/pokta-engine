@@ -91,6 +91,13 @@ export interface ApprovalRendererProps {
 export interface ApprovalRenderer {
   /** Selection discriminator — matched against the items' workflow domain. */
   artifactKind: string
+  /**
+   * When true, the renderer emits its OWN decision affordances (e.g. the batch
+   * renderer's sticky apply bar + confirm dialog, or the single-action per-card
+   * Approve/Reject). The frame then suppresses its generic action bar so the two
+   * never duplicate. Defaults to false → the frame owns the action bar.
+   */
+  ownsActionBar?: boolean
   /** Render the artifact + selection UI for the given items. */
   render(props: ApprovalRendererProps): ReactNode
   /**

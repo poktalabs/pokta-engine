@@ -1,96 +1,71 @@
 import { useMemo } from 'react'
+import type { ApprovalView } from '@godin-engine/contract'
 import { useTenant } from '@/providers/TenantProvider'
 import { ApprovalQueueFrame } from '@/features/approvals/ApprovalQueueFrame'
 import type {
   ApprovalRenderer,
-  ApprovalRendererProps,
   DecisionHandler,
 } from '@/features/approvals/types'
-import { MOCK_APPROVALS } from '@/mocks/approvals'
+import { batchApprovalRenderer } from '@/features/approvals/renderers/BatchApprovalRenderer'
+import { singleActionRenderer } from '@/features/approvals/renderers/SingleActionRenderer'
+import { MOCK_BATCH_ROWS } from '@/mocks/approvals.batch'
+import { MOCK_VINO_APPROVALS } from '@/mocks/approvals.single'
 
 /**
- * Approvals surface (M2 P2-A).
+ * Approvals surface (M2 P2).
  *
- * Mounts the universal `ApprovalQueueFrame` and selects a renderer by the items'
- * `workflowId` domain (`mipase.*` → batch, `vino.*` → single-action). The real
- * `BatchApprovalRenderer` (P2-B) and `SingleActionRenderer` (P2-C) plug in here
- * by swapping the `renderer` prop — nothing else changes. Until those land, a
- * minimal contract-conformant renderer proves the swap seam on mock data.
+ * Mounts the universal `ApprovalQueueFrame` and selects a renderer by the active
+ * TENANT (== the items' `workflowId` domain): Mi Pase's `mipase.*` daily-pricing
+ * queue gets the virtualized `BatchApprovalRenderer` (P2-B, the hero); Vino's
+ * `vino.*` queue gets the focused `SingleActionRenderer` (P2-C). The plan's
+ * central thesis holds here — between tenants the ONLY thing that changes is the
+ * `renderer` prop (and its mock queue); the frame, the 6-state machine, the async
+ * lifecycle, the audit trail and the a11y contract are all shared.
+ *
+ * Both renderers own their own action surface (`ownsActionBar`), so the frame
+ * suppresses its generic batch bar to avoid a duplicate Approve/Reject.
  */
 
-/**
- * Placeholder renderer satisfying the P2-A contract. P2-B / P2-C replace this
- * with the virtualized batch table and the single-action card respectively.
- */
-function makePlaceholderRenderer(artifactKind: string): ApprovalRenderer {
-  return {
-    artifactKind,
-    render({ items, selection, onToggle, failedItemIds, disabled }: ApprovalRendererProps) {
-      return (
-        <ul className="divide-y divide-[var(--border)] border border-[var(--rule)] bg-[var(--surface)]">
-          {items.map((item) => {
-            const failed = failedItemIds.includes(item.approvalId)
-            return (
-              <li
-                key={item.approvalId}
-                className="flex items-center gap-3 px-4 py-3 text-sm"
-                aria-invalid={failed || undefined}
-              >
-                <input
-                  type="checkbox"
-                  checked={selection.has(item.approvalId)}
-                  onChange={() => onToggle(item.approvalId)}
-                  disabled={disabled}
-                  aria-label={`Select ${item.workflowId}`}
-                />
-                <span className="font-mono text-xs text-[var(--foreground-soft)]">
-                  {item.workflowId}
-                </span>
-                {failed && (
-                  <span className="text-xs font-semibold text-[var(--status-fail)]">
-                    Failed — retry
-                  </span>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )
-    },
-    toDecisionPayload(selection, items) {
-      const chosen = items.filter((i) => selection.has(i.approvalId))
-      return {
-        approvalIds: chosen.map((i) => i.approvalId),
-        artifactKind,
-        artifact: chosen.map((i) => i.artifact),
-      }
-    },
-  }
+interface TenantQueue {
+  items: ApprovalView[]
+  renderer: ApprovalRenderer
+  target: { what: string; where: string }
+  risk?: { tier: 'low' | 'medium' | 'high'; label: string }
 }
 
-/** Resolve the active tenant's queue + renderer from mock data. */
-function useApprovalQueue(tenantId: string) {
-  return useMemo(() => {
-    const prefix = tenantId === 'mipase' ? 'mipase.' : 'vino.'
-    const items = MOCK_APPROVALS.filter((a) => a.workflowId.startsWith(prefix))
-    const artifactKind = items[0]?.workflowId.split('.')[0] ?? tenantId
-    return { items, renderer: makePlaceholderRenderer(artifactKind) }
+/** Resolve the active tenant's pending queue + its renderer from mock data. */
+function useApprovalQueue(tenantId: string): TenantQueue {
+  return useMemo<TenantQueue>(() => {
+    if (tenantId === 'vino') {
+      return {
+        items: MOCK_VINO_APPROVALS,
+        renderer: singleActionRenderer,
+        target: { what: 'Run drafted actions', where: 'Vino integrations' },
+      }
+    }
+    // Default / Mi Pase: the daily-pricing batch, one ApprovalView per flagged row.
+    return {
+      items: MOCK_BATCH_ROWS,
+      renderer: batchApprovalRenderer,
+      target: { what: 'Apply suggested prices', where: 'Shopify · test store' },
+      risk: { tier: 'medium', label: 'Price changes' },
+    }
   }, [tenantId])
 }
 
+/**
+ * Mock decision handler — succeeds without touching the network (mock-data-first,
+ * behind `VITE_USE_MOCKS`). P5b swaps this for the real `apiFetch` mutation hook,
+ * which returns a `PartialFailure` when some items fail (the frame already renders
+ * that state + "Retry failed").
+ */
 const mockDecision: DecisionHandler = async () => {
-  // Mock-data-first: succeed without touching the network (VITE_USE_MOCKS).
   await new Promise((r) => setTimeout(r, 200))
 }
 
 export default function Approvals() {
   const tenant = useTenant()
-  const { items, renderer } = useApprovalQueue(tenant.id)
-
-  const target =
-    tenant.id === 'mipase'
-      ? { what: 'Apply suggested prices', where: 'Shopify · test store' }
-      : { what: 'Run drafted actions', where: 'Vino integrations' }
+  const { items, renderer, target, risk } = useApprovalQueue(tenant.id)
 
   return (
     <ApprovalQueueFrame
@@ -100,6 +75,7 @@ export default function Approvals() {
       renderer={renderer}
       onDecision={mockDecision}
       target={target}
+      risk={risk}
     />
   )
 }
