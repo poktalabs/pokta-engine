@@ -1,4 +1,11 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react'
 
 /**
  * Tenant boundary (P1 — fills the P0 stub).
@@ -60,8 +67,14 @@ export const TENANTS: Record<TenantId, TenantConfig> = {
 /** Default active tenant for M2 single-tenant delivery. */
 export const DEFAULT_TENANT: TenantId = 'mipase'
 
+/** Narrow an arbitrary string (e.g. a route param) to a known tenant id. */
+export function isTenantId(value: string | undefined): value is TenantId {
+  return value === 'mipase' || value === 'vino'
+}
+
 interface TenantContextValue {
   tenant: TenantConfig
+  setTenant: (id: TenantId) => void
 }
 
 const TenantContext = createContext<TenantContextValue | null>(null)
@@ -71,12 +84,17 @@ export function TenantProvider({
   tenantId = DEFAULT_TENANT,
 }: {
   children: ReactNode
-  /** Override the active tenant (P4-Z flips this to `vino` for acceptance). */
+  /** Initial active tenant (the `/:tenant` route segment then drives it at runtime). */
   tenantId?: TenantId
 }) {
+  // Stateful so the `/:tenant` URL segment can switch the active tenant at runtime
+  // (TenantProvider sits above the router in the locked nesting, so the shell —
+  // which renders under `/:tenant` — syncs the param into here via `useSetTenant`).
+  const [activeId, setActiveId] = useState<TenantId>(tenantId)
+  const setTenant = useCallback((id: TenantId) => setActiveId(id), [])
   const value = useMemo<TenantContextValue>(
-    () => ({ tenant: TENANTS[tenantId] }),
-    [tenantId],
+    () => ({ tenant: TENANTS[activeId], setTenant }),
+    [activeId, setTenant],
   )
   return (
     <TenantContext.Provider value={value}>
@@ -92,4 +110,11 @@ export function useTenant(): TenantConfig {
   const ctx = useContext(TenantContext)
   if (!ctx) throw new Error('useTenant must be used within <TenantProvider>')
   return ctx.tenant
+}
+
+/** Setter to sync the active tenant from the `/:tenant` route segment. */
+export function useSetTenant(): (id: TenantId) => void {
+  const ctx = useContext(TenantContext)
+  if (!ctx) throw new Error('useSetTenant must be used within <TenantProvider>')
+  return ctx.setTenant
 }

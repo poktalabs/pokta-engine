@@ -45,15 +45,49 @@ import {
  * real positions despite windowing.
  */
 
+/**
+ * Header and EVERY body row share ONE responsive CSS grid so the columns can
+ * never drift out of alignment (the prior bug: a `flex` header vs. hand-built
+ * `flex` rows whose fixed widths overflowed, collapsing the `flex-1` product
+ * cell to ~0 and overlapping the "Product"/"Category" labels).
+ *
+ * Optional columns are toggled with `display:none` (`hidden md/lg/xl:block`),
+ * and grid skips display:none children — so the track count in each breakpoint's
+ * template must equal the number of VISIBLE columns at that breakpoint. DOM
+ * column order (and therefore track order) is fixed:
+ *   select · product · category · current · suggested · competitor · margin · why
+ *
+ * Visibility ladder:
+ *   base (<md): select product            current suggested            margin       (5)
+ *   md  (≥768): select product            current suggested competitor margin       (6)
+ *   lg (≥1024): select product category   current suggested competitor margin       (7)
+ *   xl (≥1280): select product category   current suggested competitor margin why   (8)
+ *
+ * `product` (and `why` at xl) use minmax(..,fr) so they flex with the container
+ * yet never collapse below a readable minimum.
+ */
+const GRID_TEMPLATE_CLASSES = cn(
+  // base — 5 visible cols: select product current suggested margin
+  'grid-cols-[40px_minmax(200px,1.4fr)_110px_140px_110px]',
+  // md — insert competitor before margin (6)
+  'md:grid-cols-[40px_minmax(200px,1.4fr)_110px_140px_170px_110px]',
+  // lg — insert category after product (7)
+  'lg:grid-cols-[40px_minmax(200px,1.4fr)_120px_110px_140px_170px_110px]',
+  // xl — append why (8)
+  'xl:grid-cols-[40px_minmax(200px,1.4fr)_120px_110px_140px_170px_110px_minmax(200px,1.2fr)]',
+)
+
+/** Per-column cell classes shared by the header and body rows (alignment only —
+ * the grid template owns the widths now, so no per-cell fixed widths). */
 const COLUMNS = [
-  { key: 'select', label: '', className: 'w-10 shrink-0' },
-  { key: 'product', label: 'Product', className: 'flex-1 min-w-0' },
-  { key: 'category', label: 'Category', className: 'w-32 shrink-0 hidden lg:block' },
-  { key: 'current', label: 'Current', className: 'w-28 shrink-0 text-right' },
-  { key: 'suggested', label: 'Suggested', className: 'w-36 shrink-0 text-right' },
-  { key: 'competitor', label: 'Competitor ref', className: 'w-44 shrink-0 hidden md:block text-right' },
-  { key: 'margin', label: 'Margin', className: 'w-32 shrink-0 text-right' },
-  { key: 'why', label: 'Why flagged', className: 'w-72 shrink-0 hidden xl:block' },
+  { key: 'select', label: '', className: '' },
+  { key: 'product', label: 'Product', className: 'min-w-0' },
+  { key: 'category', label: 'Category', className: 'hidden lg:block min-w-0' },
+  { key: 'current', label: 'Current', className: 'text-right' },
+  { key: 'suggested', label: 'Suggested', className: 'text-right' },
+  { key: 'competitor', label: 'Competitor ref', className: 'hidden md:block text-right' },
+  { key: 'margin', label: 'Margin', className: 'text-right' },
+  { key: 'why', label: 'Why flagged', className: 'hidden xl:block min-w-0' },
 ] as const
 
 /** MXN money — Mi Pase tenant currency. No fraction digits for shelf prices. */
@@ -156,13 +190,20 @@ export function BatchApprovalRenderer(props: ApprovalRendererProps) {
         {/* Sticky header row. */}
         <div
           role="row"
-          className="sticky top-0 z-20 flex items-stretch gap-3 border-b border-[var(--rule)] bg-[var(--surface-2)] px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+          className={cn(
+            'sticky top-0 z-20 grid items-stretch gap-3 border-b border-[var(--rule)] bg-[var(--surface-2)] px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]',
+            GRID_TEMPLATE_CLASSES,
+          )}
         >
           {COLUMNS.map((col) =>
             col.key === 'select' ? (
               <span key={col.key} className={col.className} aria-hidden="true" />
             ) : (
-              <span key={col.key} role="columnheader" className={col.className}>
+              <span
+                key={col.key}
+                role="columnheader"
+                className={cn('truncate', col.className)}
+              >
                 {col.label}
               </span>
             ),
@@ -308,13 +349,14 @@ function BatchRow({ index, item, checked, failed, disabled, onToggle }: BatchRow
       aria-selected={checked}
       aria-invalid={failed || undefined}
       className={cn(
-        'flex items-center gap-3 border-b border-[var(--border)] px-4 py-3 text-sm',
+        'grid items-center gap-3 border-b border-[var(--border)] px-4 py-3 text-sm',
+        GRID_TEMPLATE_CLASSES,
         checked ? 'bg-[var(--surface)]' : 'bg-[var(--surface-2)] opacity-70',
         failed && 'bg-[var(--status-fail-bg)]',
       )}
     >
       {/* Exclude checkbox. */}
-      <div className="flex w-10 shrink-0 items-center">
+      <div className="flex items-center">
         <input
           id={checkboxId}
           type="checkbox"
@@ -327,7 +369,7 @@ function BatchRow({ index, item, checked, failed, disabled, onToggle }: BatchRow
       </div>
 
       {/* Product + SKU + category chip. */}
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span
             className="truncate font-medium text-[var(--foreground)]"
@@ -348,12 +390,12 @@ function BatchRow({ index, item, checked, failed, disabled, onToggle }: BatchRow
       </div>
 
       {/* Category chip (wide layouts). */}
-      <div className="hidden w-32 shrink-0 lg:block">
+      <div className="hidden min-w-0 lg:block">
         <CategoryChip category={row.category} />
       </div>
 
       {/* Current price (strikethrough when it changes). */}
-      <div className="w-28 shrink-0 text-right tabular-nums">
+      <div className="text-right tabular-nums">
         <span
           className={cn(
             row.deltaPct !== 0 && 'text-[var(--muted-foreground)] line-through',
@@ -364,7 +406,7 @@ function BatchRow({ index, item, checked, failed, disabled, onToggle }: BatchRow
       </div>
 
       {/* Suggested price + Δ delta chip. */}
-      <div className="flex w-36 shrink-0 flex-col items-end gap-0.5">
+      <div className="flex flex-col items-end gap-0.5">
         <span className="font-semibold tabular-nums text-[var(--foreground)]">
           {MXN.format(row.suggestedPrice)}
         </span>
@@ -372,7 +414,7 @@ function BatchRow({ index, item, checked, failed, disabled, onToggle }: BatchRow
       </div>
 
       {/* Competitor reference + Mercado Libre LIVE badge. */}
-      <div className="hidden w-44 shrink-0 flex-col items-end gap-0.5 md:flex">
+      <div className="hidden flex-col items-end gap-0.5 md:flex">
         {row.competitorRef != null ? (
           <>
             <span className="tabular-nums text-[var(--foreground-soft)]">
@@ -389,12 +431,12 @@ function BatchRow({ index, item, checked, failed, disabled, onToggle }: BatchRow
       </div>
 
       {/* Margin + BELOW 15% FLOOR / cost-unknown treatment. */}
-      <div className="flex w-32 shrink-0 flex-col items-end gap-0.5">
+      <div className="flex flex-col items-end gap-0.5">
         <MarginCell margin={row.margin} belowFloor={row.belowFloor} />
       </div>
 
       {/* Why flagged (wide layouts). */}
-      <div className="hidden w-72 shrink-0 xl:block">
+      <div className="hidden min-w-0 xl:block">
         <WhyFlagged reason={row.reason} detail={row.reasonDetail} />
       </div>
     </div>

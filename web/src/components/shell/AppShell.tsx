@@ -1,7 +1,8 @@
-import { Outlet } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Outlet, useParams } from 'react-router-dom'
 import { TopBar } from '@/components/shell/TopBar'
 import { Sidebar } from '@/components/shell/Sidebar'
-import { useTenant } from '@/providers/TenantProvider'
+import { useTenant, useSetTenant, isTenantId } from '@/providers/TenantProvider'
 
 /**
  * Tenant-agnostic workspace shell (P1).
@@ -15,6 +16,15 @@ import { useTenant } from '@/providers/TenantProvider'
  */
 export function AppShell() {
   const tenant = useTenant()
+  const setTenant = useSetTenant()
+  // The `/:tenant` URL segment is the source of truth for the active tenant.
+  // Sync it into TenantProvider (which sits above the router) so /mipase vs /vino
+  // actually swaps lockup, currency, integrations AND the approvals renderer.
+  const { tenant: tenantParam } = useParams()
+  useEffect(() => {
+    if (isTenantId(tenantParam) && tenantParam !== tenant.id) setTenant(tenantParam)
+  }, [tenantParam, tenant.id, setTenant])
+
   const pendingApprovals = 0 // P2 wires the real pending count
 
   return (
