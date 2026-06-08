@@ -10,18 +10,20 @@ import { DEFAULT_TENANT } from '@/providers/TenantProvider'
  * theming. M2 defaults to Mi Pase; flipping the provider swaps lockup + nav with
  * zero CSS change (P4-Z).
  *
- * Later phases fill the page bodies (P2 Approvals, P3 Workflows/Runs, P4
- * Integrations/Reports/Settings) — the route shape is frozen here.
+ * P2 Approvals, P3 Workflows/Runs, and P4 Integrations/Reports/Settings now
+ * mount their real surfaces (from `pages/<surface>/*`) behind `<Suspense>`.
  */
 const AppShell = lazy(() =>
   import('@/components/shell/AppShell').then((m) => ({ default: m.AppShell })),
 )
 const Approvals = lazy(() => import('@/pages/Approvals'))
-const Workflows = lazy(() => import('@/pages/Workflows'))
-const Integrations = lazy(() => import('@/pages/Integrations'))
-const Reports = lazy(() => import('@/pages/Reports'))
-const Settings = lazy(() => import('@/pages/Settings'))
-const DetailPlaceholder = lazy(() => import('@/pages/DetailPlaceholder'))
+const Workflows = lazy(() => import('@/pages/workflows/WorkflowsList'))
+const WorkflowDetail = lazy(() => import('@/pages/workflows/DailyPricingDetail'))
+const RunDetail = lazy(() => import('@/pages/runs/RunDetail'))
+const Integrations = lazy(() => import('@/pages/integrations/Integrations'))
+const Reports = lazy(() => import('@/pages/reports/ReportsPage'))
+const ReportDetail = lazy(() => import('@/pages/reports/ReportDetailPage'))
+const Settings = lazy(() => import('@/pages/settings'))
 const NotFound = lazy(() => import('@/pages/NotFound'))
 
 const router = createBrowserRouter([
@@ -36,11 +38,11 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="approvals" replace /> },
       { path: 'approvals', element: <Approvals /> },
       { path: 'workflows', element: <Workflows /> },
-      { path: 'workflows/:id', element: <DetailPlaceholder kind="Workflow" /> },
-      { path: 'runs/:id', element: <DetailPlaceholder kind="Run" /> },
+      { path: 'workflows/:id', element: <WorkflowDetail /> },
+      { path: 'runs/:id', element: <RunDetail /> },
       { path: 'integrations', element: <Integrations /> },
       { path: 'reports', element: <Reports /> },
-      { path: 'reports/:id', element: <DetailPlaceholder kind="Report" /> },
+      { path: 'reports/:id', element: <ReportDetail /> },
       { path: 'settings', element: <Settings /> },
     ],
   },
