@@ -7,8 +7,10 @@
 export { registerMock, resetMocks, resolveMock } from './registry'
 export type { MockContext, MockHandler, MockMethod } from './registry'
 
-// Per-surface fixtures are registered by importing them here in later phases:
-// import './approvals'
+// Per-surface fixtures register their handlers by side-effect on import.
+import './approvals'
+
+// Remaining surfaces are added here in later phases:
 // import './runs'
 // import './workflows'
 // import './integrations'

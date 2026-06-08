@@ -4,6 +4,10 @@ import {
   errorEnvelopeSchema,
 } from '@godin-engine/contract'
 import { resolveMock } from '@/mocks/registry'
+// Side-effect import: registers every per-surface fixture (approvals, …) with
+// the registry. Tree-shaken out of the network build because the bundler drops
+// the unused export binding; the import is kept for its registration side effect.
+import '@/mocks'
 
 /**
  * The single client-side fetch seam for `/v1`. Mock-data-first: when
