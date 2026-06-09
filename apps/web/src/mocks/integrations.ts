@@ -176,7 +176,7 @@ const VINO_INTEGRATIONS: IntegrationStatus[] = [
 
 /** Per-tenant integration catalogs, keyed by `TenantId`. */
 export const MOCK_INTEGRATIONS: Record<string, IntegrationStatus[]> = {
-  mipase: MIPASE_INTEGRATIONS,
+  'mi-pase': MIPASE_INTEGRATIONS,
   vino: VINO_INTEGRATIONS,
 }
 
@@ -195,6 +195,6 @@ export function integrationsForTenant(tenantId: string): IntegrationStatus[] {
  * affordance.
  */
 registerMock('GET', /^\/v1\/integrations$/, (ctx): IntegrationListResponse => {
-  const tenant = new URLSearchParams(ctx.path.split('?')[1] ?? '').get('tenant') ?? 'mipase'
+  const tenant = new URLSearchParams(ctx.path.split('?')[1] ?? '').get('tenant') ?? 'mi-pase'
   return { integrations: integrationsForTenant(tenant) }
 })

@@ -147,7 +147,7 @@ export interface WorkflowDetail {
   history: WorkflowRunHistoryRow[]
 }
 
-const CONSUMER_ID = 'mipase'
+const CONSUMER_ID = 'mi-pase'
 const PRICING_WORKFLOW_ID = 'mipase.daily-pricing'
 
 /** Build a contract `RunListItem` for a daily-pricing run-history row. */

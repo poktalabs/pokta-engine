@@ -1,29 +1,45 @@
-import { useEffect } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
+import { Navigate, Outlet, useParams } from 'react-router-dom'
 import { TopBar } from '@/components/shell/TopBar'
 import { Sidebar } from '@/components/shell/Sidebar'
-import { useTenant, useSetTenant, isTenantId } from '@/providers/TenantProvider'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { AccessDenied } from '@/components/auth/AccessDenied'
+import { useTenantContext } from '@/providers/TenantProvider'
 
 /**
- * Tenant-agnostic workspace shell (P1).
+ * Tenant-agnostic workspace shell + ROUTER-LEVEL tenant gate (PR2b W4).
  *
- * Sticky top bar + left nav + routed `<Outlet/>`. The `data-tenant` attribute is
- * set on the root so any tenant-scoped CSS hooks can key off it (none needed for
- * M2 — the light base is locked — but the seam exists for P4-Z).
+ * TenantProvider sits ABOVE the router and cannot navigate, so the gate lives
+ * here (AppShell mounts under `/:tenant`, inside the router). It branches on the
+ * server tenant resolution:
  *
- * `pendingApprovals` is hardcoded to 0 in P1; P2 lifts it from the approvals
- * query so the Sidebar badge reflects the real pending count.
+ *   - `loading`       → spinner (the `/v1/tenants/me` query is in flight).
+ *   - `access-denied` → the dedicated ACCESS-DENIED screen (403 TENANT_UNKNOWN):
+ *                       the DID is in no `members[]`. NEVER a default/other tenant.
+ *   - `error`         → a generic retryable error state (network/5xx).
+ *   - `ready`         → if the `/:tenant` URL segment ≠ the SERVER tenant id, REDIRECT
+ *                       to the server tenant's URL (anti-spoof / URL hygiene — the
+ *                       real boundary is server scoping, so a forged segment can
+ *                       never leak another tenant's data; this just keeps the URL
+ *                       honest). Otherwise render the workspace.
  */
 export function AppShell() {
-  const tenant = useTenant()
-  const setTenant = useSetTenant()
-  // The `/:tenant` URL segment is the source of truth for the active tenant.
-  // Sync it into TenantProvider (which sits above the router) so /mipase vs /vino
-  // actually swaps lockup, currency, integrations AND the approvals renderer.
   const { tenant: tenantParam } = useParams()
-  useEffect(() => {
-    if (isTenantId(tenantParam) && tenantParam !== tenant.id) setTenant(tenantParam)
-  }, [tenantParam, tenant.id, setTenant])
+  const { tenant, status, refetch } = useTenantContext()
+
+  if (status === 'loading') return <LoadingState label="Loading workspace…" />
+  if (status === 'access-denied') return <AccessDenied />
+  if (status === 'error' || !tenant) {
+    return <ErrorState title="Could not load your workspace" onRetry={refetch} />
+  }
+
+  // Server is the tenant authority: a URL segment that disagrees is redirected to
+  // the resolved tenant, preserving the sub-path (approvals/runs/…).
+  if (tenantParam !== tenant.id) {
+    const rest = window.location.pathname.split('/').slice(2).join('/')
+    const suffix = rest ? `/${rest}` : '/approvals'
+    return <Navigate to={`/${tenant.id}${suffix}`} replace />
+  }
 
   const pendingApprovals = 0 // P2 wires the real pending count
 

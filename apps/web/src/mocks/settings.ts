@@ -1,5 +1,3 @@
-import type { TenantId } from '@/providers/TenantProvider'
-
 /**
  * Settings fixtures (M2 P4-C) — READ-ONLY for M2.
  *
@@ -61,7 +59,7 @@ export interface WorkspaceMember {
 
 /** Read-only tenant profile block. */
 export interface TenantProfile {
-  tenantId: TenantId
+  tenantId: string
   name: string
   /** ISO 4217, mirrors TenantProvider currency. */
   currency: 'MXN' | 'USD'
@@ -84,7 +82,7 @@ export interface SettingsView {
 
 const MIPASE_SETTINGS: SettingsView = {
   profile: {
-    tenantId: 'mipase',
+    tenantId: 'mi-pase',
     name: 'Mi Pase',
     currency: 'MXN',
     locale: 'es-MX',
@@ -230,20 +228,24 @@ const VINO_SETTINGS: SettingsView = {
   ],
 }
 
-const SETTINGS_BY_TENANT: Record<TenantId, SettingsView> = {
-  mipase: MIPASE_SETTINGS,
+const SETTINGS_BY_TENANT: Record<string, SettingsView> = {
+  'mi-pase': MIPASE_SETTINGS,
   vino: VINO_SETTINGS,
 }
 
-/** Read the mock SettingsView for a tenant (deep-cloned so callers can't mutate). */
-export function getMockSettings(tenantId: TenantId): SettingsView {
-  return structuredClone(SETTINGS_BY_TENANT[tenantId])
+/**
+ * Read the mock SettingsView for a tenant id (deep-cloned so callers can't
+ * mutate). The id is now server-driven (a string), so an unknown id resolves to
+ * the EMPTY settings rather than throwing — keeps the surface resilient.
+ */
+export function getMockSettings(tenantId: string): SettingsView {
+  return structuredClone(SETTINGS_BY_TENANT[tenantId] ?? EMPTY_SETTINGS)
 }
 
 /** An empty settings payload — drives the page's EMPTY state in demos/tests. */
 export const EMPTY_SETTINGS: SettingsView = {
   profile: {
-    tenantId: 'mipase',
+    tenantId: 'mi-pase',
     name: 'Mi Pase',
     currency: 'MXN',
     locale: 'es-MX',

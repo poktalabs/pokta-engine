@@ -49,7 +49,7 @@ const TRIGGER_ICON: Record<WorkflowTrigger['kind'], ComponentType<LucideProps>> 
 
 export interface WorkflowRowProps {
   workflow: WorkflowListItem
-  /** Base path for the detail link, e.g. `/mipase/workflows`. */
+  /** Base path for the detail link, e.g. `/mi-pase/workflows`. */
   basePath: string
   className?: string
 }

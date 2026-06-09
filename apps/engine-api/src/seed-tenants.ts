@@ -34,6 +34,41 @@ export interface TenantSeed {
 const SECRET_PREFIX_RE = /^[A-Z][A-Z0-9_]*$/
 
 /**
+ * Read the ops-owned member DIDs for a tenant from env (PR2b B1). The env var is
+ * `${secretPrefix}_MEMBER_DIDS` (e.g. `MIPASE_MEMBER_DIDS`), a comma-separated
+ * list of Privy DIDs. Split on comma, trim, drop empties, and DEDUPE. An
+ * unset/blank env (or a null secretPrefix) → `[]` (a no-op union below).
+ *
+ * Members are ops-owned and env-seeded: NO DID literal ever lives in source or a
+ * commit (the values come from Railway/`.env.local`); `.env.example` carries only
+ * a placeholder. The merge is strictly ADDITIVE (§3.6) — see `seedTenants`.
+ */
+export function envMemberDids(secretPrefix: string | null): string[] {
+  if (!secretPrefix) return []
+  const raw = process.env[`${secretPrefix}_MEMBER_DIDS`]
+  if (!raw?.trim()) return []
+  const seen = new Set<string>()
+  for (const part of raw.split(',')) {
+    const did = part.trim()
+    if (did) seen.add(did)
+  }
+  return [...seen]
+}
+
+/** Union two DID lists, preserving order (a first, then new b entries), deduped. */
+function unionDids(a: string[], b: string[]): string[] {
+  const seen = new Set(a)
+  const out = [...a]
+  for (const did of b) {
+    if (!seen.has(did)) {
+      seen.add(did)
+      out.push(did)
+    }
+  }
+  return out
+}
+
+/**
  * The seed set (PR2 §4):
  *   - mi-pase  — ACTIVE (the first paid client; real Shopify dev creds).
  *   - vino     — PENDING (no real creds until PR3; must NOT resolve/dispatch yet).
@@ -105,12 +140,21 @@ export function validateSeeds(seeds: TenantSeed[], manifestIds: string[] = listM
 /**
  * Seed (idempotent upsert) the validated tenants into engine_tenants. Re-running
  * keeps config-managed columns in sync (name/status/branding/allow-list/prefix)
- * while bumping `updated_at`; `members` is intentionally PRESERVED on conflict so
- * a re-deploy never wipes DIDs added out-of-band (PR2b). `created_at` is untouched.
+ * while bumping `updated_at`. `created_at` is untouched.
+ *
+ * MEMBER DIDs (PR2b B1) are ADDITIVE and never wiped:
+ *   - the INSERTed `members` is the seed's static `members` UNION the env DIDs
+ *     (`${secretPrefix}_MEMBER_DIDS`), deduped;
+ *   - on CONFLICT we set `members` to the UNION of the EXISTING column and the
+ *     env-derived insert values (`array(select distinct unnest(existing || excluded))`).
+ *     So a re-deploy ADDS any new env DIDs while preserving DIDs added out-of-band
+ *     — it can never wipe `members` (an empty/unset env is a no-op: the union with
+ *     `excluded.members={}` returns the existing set unchanged).
  */
 export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: TenantSeed[] = TENANT_SEEDS): Promise<void> {
   validateSeeds(seeds)
   for (const t of seeds) {
+    const members = unionDids(t.members, envMemberDids(t.secretPrefix))
     await db
       .insert(schema.engineTenants)
       .values({
@@ -121,7 +165,7 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
         locale: t.locale,
         branding: t.branding,
         allowedWorkflows: t.allowedWorkflows,
-        members: t.members,
+        members,
         secretPrefix: t.secretPrefix,
       })
       .onConflictDoUpdate({
@@ -134,6 +178,12 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
           branding: t.branding,
           allowedWorkflows: t.allowedWorkflows,
           secretPrefix: t.secretPrefix,
+          // ADDITIVE union: keep every existing DID, add the env-derived ones.
+          members: sql`(
+            select coalesce(array(
+              select distinct unnest(${schema.engineTenants.members} || excluded.members)
+            ), '{}')
+          )`,
           updatedAt: sql`now()`,
         },
       })

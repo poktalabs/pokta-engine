@@ -27,7 +27,7 @@ const STATUS_META: Record<RunStatus, { status: PillStatus; label: string }> = {
 
 export interface RunHistoryTableProps {
   rows: WorkflowRunHistoryRow[]
-  /** Base path for run-detail links, e.g. `/mipase/runs`. */
+  /** Base path for run-detail links, e.g. `/mi-pase/runs`. */
   runsBasePath: string
   className?: string
 }

@@ -59,7 +59,7 @@ export interface ReportChart {
 /** One row in the Reports index (lightweight — no table/chart payload). */
 export interface ReportSummary {
   id: string
-  tenantId: 'mipase' | 'vino'
+  tenantId: 'mi-pase' | 'vino'
   kind: ReportKind
   title: string
   /** One-line plain-language description for the index card. */
@@ -92,7 +92,7 @@ export interface ReportDetail extends ReportSummary {
 
 const mipasePricingImpact: ReportDetail = {
   id: 'rpt_mipase_pricing_impact_20260608',
-  tenantId: 'mipase',
+  tenantId: 'mi-pase',
   kind: 'pricing-impact',
   title: 'Daily pricing impact',
   description:
@@ -179,7 +179,7 @@ const mipasePricingImpact: ReportDetail = {
 
 const mipaseCompetitorMetadata: ReportDetail = {
   id: 'rpt_mipase_competitor_metadata_20260607',
-  tenantId: 'mipase',
+  tenantId: 'mi-pase',
   kind: 'competitor-metadata',
   title: 'Competitor metadata research',
   description:
@@ -438,7 +438,7 @@ function toSummary(report: ReportDetail): ReportSummary {
 }
 
 /** All reports for a tenant, newest first. */
-export function reportsForTenant(tenantId: 'mipase' | 'vino'): ReportSummary[] {
+export function reportsForTenant(tenantId: 'mi-pase' | 'vino'): ReportSummary[] {
   return MOCK_REPORTS.filter((r) => r.tenantId === tenantId)
     .map(toSummary)
     .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))
@@ -455,7 +455,7 @@ registerMock('GET', '/v1/reports', (ctx): ReportListResponse => {
   // Optional `?tenant=` query scopes the index; default to all reports.
   const query = ctx.path.split('?')[1] ?? ''
   const tenant = new URLSearchParams(query).get('tenant')
-  if (tenant === 'mipase' || tenant === 'vino') {
+  if (tenant === 'mi-pase' || tenant === 'vino') {
     return { reports: reportsForTenant(tenant) }
   }
   return { reports: MOCK_REPORTS.map(toSummary) }

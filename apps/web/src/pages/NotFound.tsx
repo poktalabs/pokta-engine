@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Compass } from 'lucide-react'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { DEFAULT_TENANT } from '@/providers/TenantProvider'
 
 /** 404 — routed catch-all. */
 export default function NotFound() {
@@ -15,7 +14,13 @@ export default function NotFound() {
           description="That route doesn’t exist. Head back to your workspace."
           action={{
             label: 'Go to workspace',
-            onClick: () => navigate(`/${DEFAULT_TENANT}/approvals`),
+            // Navigate to the root, NOT a static `/${DEFAULT_TENANT}/…` target.
+            // RootRedirect (App.tsx) derives the landing URL from the SERVER tenant
+            // (`/v1/tenants/me`), so no client-side default ever drives a tenant URL
+            // here (§3.2 "derive from server"). Defense-in-depth: the AppShell gate
+            // already neutralizes a wrong segment, but this removes the static
+            // DEFAULT_TENANT from the navigation target entirely.
+            onClick: () => navigate('/'),
           }}
         />
       </div>

@@ -5,8 +5,9 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     // Drop the base `["node"]` global types; the SPA wants Vite's client ambient
-    // types (import.meta.env, ?url imports) instead of Node globals.
-    "types": ["vite/client"],
+    // types (import.meta.env, ?url imports) instead of Node globals. The test
+    // harness (src/test/**) adds vitest globals + jest-dom matcher augmentation.
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
     "strict": true,
     "noEmit": true,
     // Bundler resolution handles `@godin-engine/contract` from its ./src and the
