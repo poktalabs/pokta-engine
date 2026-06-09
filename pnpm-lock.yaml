@@ -14,6 +14,9 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.22.4
+      turbo:
+        specifier: ^2.3.3
+        version: 2.9.16
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -21,20 +24,20 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.19)
 
-  engine-api:
+  apps/engine-api:
     dependencies:
       '@godin-engine/contract':
         specifier: workspace:*
-        version: link:../packages/contract
+        version: link:../../packages/contract
       '@godin-engine/db':
         specifier: workspace:*
-        version: link:../packages/db
+        version: link:../../packages/db
       '@godin-engine/queue':
         specifier: workspace:*
-        version: link:../packages/queue
+        version: link:../../packages/queue
       '@godin-engine/workflows':
         specifier: workspace:*
-        version: link:../workflows
+        version: link:../../packages/workflows
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.23)
@@ -54,6 +57,37 @@ importers:
       jose:
         specifier: ^6.2.3
         version: 6.2.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  apps/worker:
+    dependencies:
+      '@godin-engine/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
+      '@godin-engine/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@godin-engine/mercadolibre':
+        specifier: workspace:*
+        version: link:../../packages/mercadolibre
+      '@godin-engine/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
+      '@godin-engine/shopify':
+        specifier: workspace:*
+        version: link:../../packages/shopify
+      '@godin-engine/workflows':
+        specifier: workspace:*
+        version: link:../../packages/workflows
+      drizzle-orm:
+        specifier: ^0.38.2
+        version: 0.38.4(pg@8.21.0)(postgres@3.4.9)(react@19.2.7)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.4
+    devDependencies:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -136,60 +170,29 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  worker:
+  packages/workflows:
     dependencies:
       '@godin-engine/contract':
         specifier: workspace:*
-        version: link:../packages/contract
+        version: link:../contract
       '@godin-engine/db':
         specifier: workspace:*
-        version: link:../packages/db
-      '@godin-engine/mercadolibre':
-        specifier: workspace:*
-        version: link:../packages/mercadolibre
-      '@godin-engine/queue':
-        specifier: workspace:*
-        version: link:../packages/queue
-      '@godin-engine/shopify':
-        specifier: workspace:*
-        version: link:../packages/shopify
-      '@godin-engine/workflows':
-        specifier: workspace:*
-        version: link:../workflows
-      drizzle-orm:
-        specifier: ^0.38.2
-        version: 0.38.4(pg@8.21.0)(postgres@3.4.9)(react@19.2.7)
-      tsx:
-        specifier: ^4.19.2
-        version: 4.22.4
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
-  workflows:
-    dependencies:
-      '@godin-engine/contract':
-        specifier: workspace:*
-        version: link:../packages/contract
-      '@godin-engine/db':
-        specifier: workspace:*
-        version: link:../packages/db
+        version: link:../db
       '@godin-engine/llm':
         specifier: workspace:*
-        version: link:../packages/llm
+        version: link:../llm
       '@godin-engine/mercadolibre':
         specifier: workspace:*
-        version: link:../packages/mercadolibre
+        version: link:../mercadolibre
       '@godin-engine/notion':
         specifier: workspace:*
-        version: link:../packages/notion
+        version: link:../notion
       '@godin-engine/resend':
         specifier: workspace:*
-        version: link:../packages/resend
+        version: link:../resend
       '@godin-engine/shopify':
         specifier: workspace:*
-        version: link:../packages/shopify
+        version: link:../shopify
       drizzle-orm:
         specifier: ^0.38.2
         version: 0.38.4(pg@8.21.0)(postgres@3.4.9)(react@19.2.7)
@@ -1023,6 +1026,36 @@ packages:
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
 
+  '@turbo/darwin-64@2.9.16':
+    resolution: {integrity: sha512-jLjApWTSNd7JZ5JaLYfelW1ytnGQOvB7ivl+2RD1xQvJTbi8I9gBjzcga7tDZVPyaxpl10YTfJt3BrYXR18KDw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@turbo/darwin-arm64@2.9.16':
+    resolution: {integrity: sha512-YPgrn+5HIGzrx0O2a631SV4MBQUe4W/DafMFUuBVgaU32PW9/OTT0ehviF0QSxTXuRJlHvW2eUTemddF5/spmw==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@turbo/linux-64@2.9.16':
+    resolution: {integrity: sha512-vAEf1H6l26lTpl9FJ/peQo1NUB8RC0sbEJJz5mPcUhHA2bPDup2x3CZPgo/bH8S4cUcBLm4FN3UHd5iUO2RAew==}
+    cpu: [x64]
+    os: [linux]
+
+  '@turbo/linux-arm64@2.9.16':
+    resolution: {integrity: sha512-xDBLR2PZg4BrQOchfG6svgpv5FCNJ2TOtT2psLdEJcdKo1BH+pnPs9Xj6pvUjgfkHbuvBOfeE4R6tvxMoQKDHQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@turbo/windows-64@2.9.16':
+    resolution: {integrity: sha512-NBAJnaUiGdgkSzQwUIdOvkCkcpTSu58G/sBGa0mvBtzfvFOOgrQwepKOOQ8cp6sWM6OcKDNFj2p1dsZA1OWjPg==}
+    cpu: [x64]
+    os: [win32]
+
+  '@turbo/windows-arm64@2.9.16':
+    resolution: {integrity: sha512-Y7SJppD0Z8wjO3Ec0ZGd9KQ4Yv0BMnA8CIowj5Vp+OEVsosXDG2weK6/t1RRLfJmc2Ozrnd6y4DOgQys+mn3WQ==}
+    cpu: [arm64]
+    os: [win32]
+
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
 
@@ -1788,6 +1821,10 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  turbo@2.9.16:
+    resolution: {integrity: sha512-NqgRQy6j6dPYcdSdv0q1g9QsZg7SWg87RERM8otw/1AtKU2yTFVClOM7cbwKzOonZr/Ek1blTBucw64L9H0Bwg==}
+    hasBin: true
+
   type-fest@0.20.2:
     resolution: {integrity: sha512-Ne+eE4r0/iWnpAxD852z3A+N0Bt5RN//NjJwRd2VFHEmrywxf5vsZlh4R6lixl6B+wz/8d+maTSAkN1FIkI3LQ==}
     engines: {node: '>=10'}
@@ -2480,6 +2517,24 @@ snapshots:
   '@swc/helpers@0.5.23':
     dependencies:
       tslib: 2.8.1
+
+  '@turbo/darwin-64@2.9.16':
+    optional: true
+
+  '@turbo/darwin-arm64@2.9.16':
+    optional: true
+
+  '@turbo/linux-64@2.9.16':
+    optional: true
+
+  '@turbo/linux-arm64@2.9.16':
+    optional: true
+
+  '@turbo/windows-64@2.9.16':
+    optional: true
+
+  '@turbo/windows-arm64@2.9.16':
+    optional: true
 
   '@types/connect@3.4.38':
     dependencies:
@@ -3254,6 +3309,15 @@ snapshots:
       esbuild: 0.28.0
     optionalDependencies:
       fsevents: 2.3.3
+
+  turbo@2.9.16:
+    optionalDependencies:
+      '@turbo/darwin-64': 2.9.16
+      '@turbo/darwin-arm64': 2.9.16
+      '@turbo/linux-64': 2.9.16
+      '@turbo/linux-arm64': 2.9.16
+      '@turbo/windows-64': 2.9.16
+      '@turbo/windows-arm64': 2.9.16
 
   type-fest@0.20.2: {}
 

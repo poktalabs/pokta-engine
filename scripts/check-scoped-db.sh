@@ -13,18 +13,18 @@
 # structurally un-mergeable.
 #
 # ALLOWLIST (intentionally exempt):
-#   - engine-api/src/scoped-db.ts  — THE tenant-scoping layer itself; its raw SQL is
-#                                     tenant-bound by construction (ledger key embeds
+#   - apps/engine-api/src/scoped-db.ts  — THE tenant-scoping layer itself; its raw SQL
+#                                     is tenant-bound by construction (ledger key embeds
 #                                     consumerId; approvals resolved via sourceRun).
-#   - engine-api/src/demo.ts
-#     engine-api/src/dashboard.ts
-#     engine-api/src/console.ts     — operator-only cross-tenant ROLLUP surfaces
+#   - apps/engine-api/src/demo.ts
+#     apps/engine-api/src/dashboard.ts
+#     apps/engine-api/src/console.ts  — operator-only cross-tenant ROLLUP surfaces
 #                                     (/demo, /dashboard, /console). Gated at app
 #                                     composition by operatorAuth() (fail-closed when
 #                                     OPERATOR_KEY unset). They are NOT /v1 tenant
 #                                     routes; cross-tenant reads there are by design.
 #
-# Anything else under engine-api/src (the /v1 surface: app.ts, index.ts, auth.ts,
+# Anything else under apps/engine-api/src (the /v1 surface: app.ts, index.ts, auth.ts,
 # and any future handler files) MUST go through scoped-db.ts.
 #
 set -euo pipefail
@@ -32,7 +32,7 @@ set -euo pipefail
 # Resolve repo-relative paths regardless of CWD.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SRC_DIR="${REPO_ROOT}/engine-api/src"
+SRC_DIR="${REPO_ROOT}/apps/engine-api/src"
 
 # Files allowed to perform raw engine_* table access.
 ALLOWLIST=(
@@ -54,7 +54,7 @@ for f in "${ALLOWLIST[@]}"; do
   EXCLUDES+=(--exclude="${f}")
 done
 
-# Search every .ts under engine-api/src EXCEPT the allowlisted files.
+# Search every .ts under apps/engine-api/src EXCEPT the allowlisted files.
 # grep exits 1 when there are no matches — that is the PASS case for us.
 HITS="$(grep -rnE "${PATTERN}" "${SRC_DIR}" \
   --include='*.ts' \

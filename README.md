@@ -12,13 +12,20 @@ references below in the form `D-N` and `§N` point at it.
 ## Layout
 
 ```
+apps/engine-api/     # Hono control plane: runs + approvals routes, policy enforced pre-dispatch
+apps/worker/         # pg-boss consumer: runs jobs in parallel, writes lifecycle, opens approval gates
+apps/web/            # Vite/React tenant workspace SPA (source lands with the M2 merge)
 packages/contract/   # Zod RunResult, error envelope, policy + manifest types (shared truth)
 packages/db/         # Drizzle schema (engine_runs, engine_quota_ledger, engine_approvals) + client
 packages/queue/      # pg-boss wrapper (single 'workflow.run' queue)
-engine-api/          # Hono control plane: runs + approvals routes, policy enforced pre-dispatch
-worker/              # pg-boss consumer: runs jobs in parallel, writes lifecycle, opens approval gates
-workflows/           # top-level (D-9): echo, echo-draft, echo-send — discovered, never imported by name
+packages/workflows/  # the workflow registry (D-9): discovered, never imported by name
+packages/{llm,notion,resend,shopify,mercadolibre}/   # fail-soft integration adapters
 ```
+
+Monorepo: `apps/*` = deployable services, `packages/*` = shared libraries.
+pnpm + Railway filter by package name (`@godin-engine/*`), so directory layout is
+free to change. Build/typecheck run through **turbo**; tests through root vitest.
+Each app carries its own `.env.example` / `.env.local`.
 
 ## Hard rules (enforced by the structure)
 

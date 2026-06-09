@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     // The lib/ logic is the validated Mi Pase pricing brain, ported VERBATIM
     // (M1 plan D4). It was authored without `noUncheckedIndexedAccess`, so we
