@@ -13,6 +13,11 @@ export const ERROR_CODES = [
   'QUOTA_EXCEEDED',
   'APPROVAL_REQUIRED',
   'APPROVAL_DENIED',
+  // Tenancy rails (M1.5). UNAUTHENTICATED is raised by the auth middleware when no
+  // valid service key / Privy token is present. TENANT_UNKNOWN is raised when a
+  // verified principal resolves to no known tenant (reserved for PR2's registry).
+  'UNAUTHENTICATED',
+  'TENANT_UNKNOWN',
 ] as const
 
 export const errorCodeSchema = z.enum(ERROR_CODES)
@@ -34,6 +39,8 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   QUOTA_EXCEEDED: 429,
   APPROVAL_REQUIRED: 403,
   APPROVAL_DENIED: 403,
+  UNAUTHENTICATED: 401,
+  TENANT_UNKNOWN: 403,
 }
 
 export class EngineError extends Error {
