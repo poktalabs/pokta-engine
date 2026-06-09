@@ -86,6 +86,12 @@ vi.mock('./tenants', () => ({
 }))
 
 const { buildApp } = await import('./app')
+// The REAL workflow registry (NOT mocked) — used below to prove the mi-pase
+// allow-list the registry swap now consults actually contains the live M1 ids,
+// so the T5 allow-list gate is a no-op for the M1 chain rather than a silent
+// blocker. If a future rename drifts the manifest ids away from the seeded
+// allow-list, this assertion fails loudly instead of the chain 404-ing.
+const { listManifests } = await import('@godin-engine/workflows')
 
 const MIPASE_KEY = { 'X-Service-Key': 'svc-key-mipase' }
 
@@ -182,5 +188,65 @@ describe('M1 regression — mi-pase pricing flow at the engine-api boundary (pos
     expect(res.status).toBe(401)
     const body = (await res.json()) as { error: { code: string } }
     expect(body.error.code).toBe('UNAUTHENTICATED')
+  })
+})
+
+/**
+ * Allow-list non-regression (PR2 / T5). After resolveTenant became registry-backed
+ * and the dispatch POST grew a per-tenant allow-list gate (right after getWorkflow),
+ * the WHOLE M1 chain must remain reachable for mi-pase. The three M1 workflow ids
+ * MUST be in mi-pase's `allowedWorkflows`, and they must all be LIVE registry ids,
+ * or the gate would silently turn the M1 chain into a 404 — the exact regression
+ * this block guards. (pricing-apply-* are child-only gated targets, so we assert
+ * the gate ADMITS them via the allow-list; a direct POST is separately refused by
+ * the gated-target check, not by the allow-list — see the explicit case below.)
+ */
+describe('M1 allow-list non-regression — the M1 ids stay dispatchable for mi-pase', () => {
+  const M1_WORKFLOW_IDS = ['pricing-draft', 'pricing-apply-confident', 'pricing-apply-flagged'] as const
+
+  it('mi-pase allowedWorkflows (registry mock) contains every live M1 workflow id', () => {
+    const mipase = TENANTS['mi-pase']
+    expect(mipase).toBeDefined()
+    expect(mipase!.status).toBe('active')
+    for (const id of M1_WORKFLOW_IDS) {
+      // in the tenant's allow-list …
+      expect(mipase!.allowedWorkflows).toContain(id)
+      // … AND a real, live registry workflow (so the gate's registry-∩ keeps it).
+      expect(listManifests().some((m) => m.id === id)).toBe(true)
+    }
+  })
+
+  it('the allow-list gate does NOT block pricing-draft for mi-pase (200 queued, not 404)', async () => {
+    const app = buildApp()
+    const res = await app.request('/v1/workflows/pricing-draft/runs', {
+      method: 'POST',
+      headers: { ...MIPASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: { scope: 'vinos', limit: 5 } }),
+    })
+    // If the allow-list gate (or resolveTenant→registry) had regressed, the
+    // post-getWorkflow gate would 404 here instead of dispatching.
+    expect(res.status).toBe(200)
+    expect(res.status).not.toBe(404)
+    const body = (await res.json()) as { status: string }
+    expect(body.status).toBe('queued')
+    // exactly one run row written, scoped to mi-pase — the chain head dispatched.
+    expect(state.inserted).toHaveLength(1)
+    expect((state.inserted[0] as Row).consumerId).toBe('mi-pase')
+  })
+
+  it('a workflow NOT in mi-pase allow-list (vino-only) → 404 SKILL_NOT_FOUND, nothing dispatched', async () => {
+    // 'call-intake' is a vino workflow id; it is NOT in mi-pase's allow-list. The
+    // gate must 404 (anti-enumeration) and dispatch nothing — proving the gate is
+    // really consulting the allow-list, so the M1 non-block above is meaningful.
+    const app = buildApp()
+    const res = await app.request('/v1/workflows/call-intake/runs', {
+      method: 'POST',
+      headers: { ...MIPASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: {} }),
+    })
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('SKILL_NOT_FOUND')
+    expect(state.inserted).toHaveLength(0)
   })
 })
