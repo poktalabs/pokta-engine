@@ -15,6 +15,13 @@
       "when": 1780893052220,
       "tag": "0001_thick_marauders",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781020648356,
+      "tag": "0002_free_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

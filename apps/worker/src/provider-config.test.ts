@@ -1,16 +1,29 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hasProvider, makeIntegrationResolver, unregisterProvider } from '@godin-engine/integrations'
-// Importing the module runs its side-effect: register the env-backed factories.
-import { registerEngineProviders } from './provider-config'
 
 /**
- * T9 — the env-backed per-tenant provider wiring (D2 / D9). Verifies the seam
- * between engine env and the resolver:
+ * T9 — the per-tenant provider wiring (D2 / D9), now sourcing the env secret
+ * PREFIX from the tenant registry (PR2 T7) instead of a hardcoded ENV_PREFIX map.
+ * Verifies the seam between engine env and the resolver:
  *   - importing the module registers shopify + mercado-libre factories
- *   - a configured tenant (MIPASE_* present) resolves a real client
- *   - an unconfigured tenant fail-softs into the resolver's "not configured" throw
+ *   - after `loadTenantSecrets(consumer)` resolves the tenant's registry prefix,
+ *     a configured tenant (MIPASE_* present) resolves a real client
+ *   - an unconfigured / unresolved tenant fail-softs into "not configured"
  *   - asking for one provider never reads the OTHER provider's env (blast radius)
+ *
+ * The registry read is MOCKED here: `getTenant('mi-pase')` returns an ACTIVE row
+ * with `secretPrefix: 'MIPASE'`; any other id returns undefined (unresolved). This
+ * proves the prefix now comes from the registry — not a hardcoded map — without a
+ * real DB. No assertion below is weakened; only the prefix source changed.
  */
+vi.mock('../../engine-api/src/tenants', () => ({
+  getTenant: async (id: string) =>
+    id === 'mi-pase' ? { tenantId: 'mi-pase', status: 'active', secretPrefix: 'MIPASE' } : undefined,
+  isActive: (row: { status: string }) => row.status === 'active',
+}))
+
+// Importing the module runs its side-effect: register the env-backed factories.
+const { registerEngineProviders, loadTenantSecrets, __resetProviderConfig } = await import('./provider-config')
 
 const MIPASE_VARS = [
   'MIPASE_SHOPIFY_BASE_URL',
@@ -24,7 +37,7 @@ const MIPASE_VARS = [
 
 const saved: Record<string, string | undefined> = {}
 
-beforeEach(() => {
+beforeEach(async () => {
   for (const k of MIPASE_VARS) {
     saved[k] = process.env[k]
     delete process.env[k]
@@ -32,6 +45,10 @@ beforeEach(() => {
   // The import already registered once; re-register so each test starts clean
   // regardless of registry mutations elsewhere (idempotent — last wins).
   registerEngineProviders()
+  // Resolve mi-pase's secret_prefix ('MIPASE') from the (mocked) registry so the
+  // synchronous provider factories can read it — this is the T7 source-of-prefix.
+  __resetProviderConfig()
+  await loadTenantSecrets('mi-pase')
 })
 
 afterEach(() => {

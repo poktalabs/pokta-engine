@@ -3,10 +3,12 @@ import type { Context, MiddlewareHandler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { EngineError } from '@godin-engine/contract'
 import { db } from '@godin-engine/db'
-import { gatedTargets as gatedTargetsOf, getWorkflow } from '@godin-engine/workflows'
+import { gatedTargets as gatedTargetsOf, getWorkflow, listManifests } from '@godin-engine/workflows'
+import type { WorkflowManifest } from '@godin-engine/contract'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
-import { consumerAuth, knownServiceConsumers, type AuthOptions } from './auth'
+import { consumerAuth, type AuthOptions } from './auth'
 import { forConsumer, resolveTenant } from './scoped-db'
+import { allowedWorkflowsFor, toTenantView, type TenantRow } from './tenants'
 import { mountDemo } from './demo'
 import { mountDashboard } from './dashboard'
 import { mountConsole } from './console'
@@ -14,6 +16,22 @@ import { mountConsole } from './console'
 // Child-only workflows: approval (`onApprove`) + onComplete targets. A direct
 // POST to any of these is refused — they are reachable only as child runs.
 const gatedTargets = gatedTargetsOf()
+
+/**
+ * Per-tenant allow-list helper (T5). The registry stays PURE (it knows nothing
+ * about tenants); the allow-list is enforced HERE in the control plane. A
+ * workflow id is dispatchable by a tenant iff it is BOTH in the tenant's
+ * `allowedWorkflows` AND a live registry workflow.
+ */
+function allowedForTenant(tenant: TenantRow, workflowId: string): boolean {
+  return allowedWorkflowsFor(tenant).includes(workflowId)
+}
+
+/** The workflow manifests this tenant may see — list surfaces filtered to its allow-list. */
+function manifestsForTenant(tenant: TenantRow): WorkflowManifest[] {
+  const allow = new Set(allowedWorkflowsFor(tenant))
+  return listManifests().filter((m) => allow.has(m.id))
+}
 
 async function enqueue(runId: string): Promise<void> {
   const boss = await getBoss()
@@ -52,7 +70,6 @@ export interface BuildAppOptions {
  */
 export function buildApp(opts: BuildAppOptions = {}): Hono {
   const app = new Hono()
-  const knownConsumers = knownServiceConsumers()
 
   app.get('/', (c) => c.json({ service: 'godin-engine engine-api', version: '0.1.0', ok: true }))
 
@@ -72,18 +89,63 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
   app.use('/v1/*', consumerAuth(opts.auth))
 
   /**
+   * GET /v1/tenants/me (T6) — the authed tenant's own profile. Resolves the tenant
+   * from ctx (service id OR Privy membership), then returns the shared TenantView:
+   * typed branding, `allowedWorkflows` filtered to the tenant's set ∩ the live
+   * registry, and integrations validated against the live integration registry.
+   * Auth is already enforced by the middleware (no credential → 401). A principal
+   * that resolves to no ACTIVE tenant → TENANT_UNKNOWN (403) — pending/disabled
+   * tenants are NOT active and so collapse into the same fail-closed 403, never
+   * leaking that the tenant exists-but-isn't-active.
+   */
+  app.get('/v1/tenants/me', async (c) => {
+    const consumer = c.get('consumer')
+    const resolved = await resolveTenant(consumer)
+    if (!resolved.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const view = toTenantView(resolved.tenant, allowedWorkflowsFor(resolved.tenant))
+    return c.json(view)
+  })
+
+  /**
+   * GET /v1/workflows (T5 list surface) — the workflows THIS tenant may dispatch.
+   * Filtered to the tenant's allow-list ∩ the live registry; a tenant never sees
+   * a workflow it could not POST. The Zod `input` schema is intentionally NOT
+   * serialized (it is a live validator, not JSON) — only safe manifest metadata.
+   */
+  app.get('/v1/workflows', async (c) => {
+    const consumer = c.get('consumer')
+    const resolved = await resolveTenant(consumer)
+    if (!resolved.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const workflows = manifestsForTenant(resolved.tenant).map((m) => ({
+      id: m.id,
+      version: m.version,
+      runtime: m.runtime,
+      timeoutMs: m.timeoutMs,
+    }))
+    return c.json({ workflows })
+  })
+
+  /**
    * POST /v1/workflows/:id/runs — the consumer boundary (D-4). Tenant comes from
    * ctx.consumer (NEVER body.consumer_id). A mismatched body.consumer_id is a 400.
    * Quota enforced pre-dispatch in one transaction (D-5).
    */
   app.post('/v1/workflows/:id/runs', async (c) => {
     const consumer = c.get('consumer')
-    const tenant = resolveTenant(consumer.id, knownConsumers)
-    if (!tenant.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no known tenant'))
+    const resolved = await resolveTenant(consumer)
+    if (!resolved.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no known tenant'))
 
     const id = c.req.param('id')
     const wf = getWorkflow(id)
     if (!wf) return fail(c, new EngineError('SKILL_NOT_FOUND', `workflow '${id}' not found`))
+    // ── Per-tenant allow-list gate (T5) ──────────────────────────────────────
+    // A workflow the tenant is not allow-listed for is a 404 SKILL_NOT_FOUND, NOT
+    // a 403 — anti-enumeration: a tenant must not be able to discover that another
+    // tenant's workflow exists. This sits RIGHT AFTER getWorkflow so a known-but-
+    // disallowed id is indistinguishable from an unknown id at the boundary.
+    if (!allowedForTenant(resolved.tenant, id)) {
+      return fail(c, new EngineError('SKILL_NOT_FOUND', `workflow '${id}' not found`))
+    }
     if (gatedTargets.has(id)) {
       return fail(c, new EngineError('APPROVAL_REQUIRED', `'${id}' is only reachable via an approved gate`))
     }

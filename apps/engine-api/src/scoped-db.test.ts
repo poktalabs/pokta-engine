@@ -48,9 +48,37 @@ vi.mock('@godin-engine/db', () => ({
   },
 }))
 
+// ── ./tenants: registry seam mocked so resolveTenant is hermetic ─────────────
+// resolveTenant (PR2) is registry-backed: service mode → getTenant(id); privy
+// mode → findTenantByMember(did); both then require status==='active'. We mock
+// the registry module so these unit assertions exercise resolveTenant's branching
+// + status gate WITHOUT a DB. isActive is the real status predicate (no weakening).
+const registry: {
+  tenants: Record<string, { status: 'active' | 'pending' | 'disabled' }>
+  members: Record<string, string[]> // did → tenant ids listing it
+} = { tenants: {}, members: {} }
+
+vi.mock('./tenants', () => ({
+  getTenant: async (id: string) => {
+    const t = registry.tenants[id]
+    return t ? { tenantId: id, status: t.status } : undefined
+  },
+  findTenantByMember: async (did: string) => {
+    const ids = registry.members[did] ?? []
+    if (ids.length === 0) return undefined
+    if (ids.length > 1) return { ambiguous: true }
+    const id = ids[0] as string
+    const t = registry.tenants[id]
+    return t ? { tenantId: id, status: t.status } : undefined
+  },
+  isActive: (row: { status: string }) => row.status === 'active',
+}))
+
 const { forConsumer, resolveTenant } = await import('./scoped-db')
 
 const CONSUMER = 'mi-pase'
+const svc = (id: string) => ({ id, identity: `service:${id}`, mode: 'service' as const })
+const privy = (did: string) => ({ id: '', identity: did, mode: 'privy' as const })
 type Marker = { eq?: [unknown, unknown]; and?: unknown[] }
 
 // ── Recording fake db ────────────────────────────────────────────────────────
@@ -395,11 +423,36 @@ describe('reject — ownership gate via source run before mutating', () => {
   })
 })
 
-describe('resolveTenant — TENANT_UNKNOWN seam', () => {
-  it('accepts mi-pase and any known SERVICE_KEYS consumer; rejects empty/unknown', () => {
-    expect(resolveTenant('mi-pase')).toEqual({ ok: true })
-    expect(resolveTenant('other', new Set(['other']))).toEqual({ ok: true })
-    expect(resolveTenant('')).toEqual({ ok: false })
-    expect(resolveTenant('ghost')).toEqual({ ok: false })
+describe('resolveTenant — registry-backed TENANT_UNKNOWN seam (PR2)', () => {
+  it('resolves an active tenant by service id / privy membership; fails closed otherwise', async () => {
+    registry.tenants = {
+      'mi-pase': { status: 'active' },
+      other: { status: 'active' },
+      vino: { status: 'pending' },
+      frozen: { status: 'disabled' },
+    }
+    registry.members = {
+      'did:privy:abc': ['mi-pase'], // single → resolves
+      'did:privy:dup': ['mi-pase', 'other'], // ambiguous → not-ok
+      'did:privy:vino': ['vino'], // mapped, but tenant not active → not-ok
+    }
+
+    // service mode → getTenant(consumer.id); active tenant resolves with its row.
+    const svcOk = await resolveTenant(svc('mi-pase'))
+    expect(svcOk.ok).toBe(true)
+    expect(svcOk.ok && svcOk.tenant.tenantId).toBe('mi-pase')
+    expect(await resolveTenant(svc(''))).toEqual({ ok: false }) // empty id
+    expect(await resolveTenant(svc('ghost'))).toEqual({ ok: false }) // unknown id
+    expect(await resolveTenant(svc('vino'))).toEqual({ ok: false }) // pending → fail closed
+    expect(await resolveTenant(svc('frozen'))).toEqual({ ok: false }) // disabled → fail closed
+
+    // privy mode → findTenantByMember(consumer.identity); status gate after membership.
+    const privyOk = await resolveTenant(privy('did:privy:abc'))
+    expect(privyOk.ok).toBe(true)
+    expect(privyOk.ok && privyOk.tenant.tenantId).toBe('mi-pase')
+    expect(await resolveTenant(privy('did:privy:nobody'))).toEqual({ ok: false }) // no membership
+    expect(await resolveTenant(privy('did:privy:dup'))).toEqual({ ok: false }) // ambiguous → never guesses
+    expect(await resolveTenant(privy('did:privy:vino'))).toEqual({ ok: false }) // non-active
+    expect(await resolveTenant(privy(''))).toEqual({ ok: false }) // empty identity
   })
 })

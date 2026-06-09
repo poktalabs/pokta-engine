@@ -64,6 +64,27 @@ vi.mock('drizzle-orm', () => ({
   sql: Object.assign((..._a: unknown[]) => ({}), { raw: () => ({}) }),
 }))
 
+// ── ./tenants registry: mi-pase + other ACTIVE, pricing-draft allow-listed ───
+// resolveTenant (PR2) is registry-backed, so the dispatch path now consults the
+// tenant registry + per-tenant allow-list. We mock the registry so the M1 flow
+// (mi-pase dispatching pricing-draft) keeps resolving without a real DB. This
+// does NOT weaken any assertion — the consumer_id binding / body-mismatch / 401
+// guards below still hold; we only supply the tenant row resolveTenant now needs.
+const TENANTS: Record<string, { status: 'active' | 'pending' | 'disabled'; allowedWorkflows: string[] }> = {
+  'mi-pase': { status: 'active', allowedWorkflows: ['pricing-draft', 'pricing-apply-confident', 'pricing-apply-flagged'] },
+  other: { status: 'active', allowedWorkflows: ['pricing-draft'] },
+}
+vi.mock('./tenants', () => ({
+  getTenant: async (id: string) => {
+    const t = TENANTS[id]
+    return t ? { tenantId: id, name: id, status: t.status, allowedWorkflows: t.allowedWorkflows } : undefined
+  },
+  findTenantByMember: async () => undefined,
+  isActive: (row: { status: string }) => row.status === 'active',
+  allowedWorkflowsFor: (row: { allowedWorkflows: string[] }) => row.allowedWorkflows,
+  toTenantView: (row: { tenantId: string; allowedWorkflows: string[] }) => ({ id: row.tenantId }),
+}))
+
 const { buildApp } = await import('./app')
 
 const MIPASE_KEY = { 'X-Service-Key': 'svc-key-mipase' }

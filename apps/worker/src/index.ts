@@ -9,7 +9,11 @@ import { makeIntegrationResolver } from '@godin-engine/integrations'
 // Side-effect import (T9): registers the env-backed shopify + mercado-libre
 // provider factories with the resolver. The IntegrationClients declaration-merge
 // is owned by the integrations package (pulled in via provider-config's import).
+// `loadTenantSecrets` resolves a run's tenant from the registry (PR2 T7) to (a)
+// populate the per-run secret-prefix the factories read and (b) act as the
+// split-brain guard that refuses a run whose tenant is gone/disabled.
 import './provider-config'
+import { loadTenantSecrets } from './provider-config'
 import { type ReaperEffects, reapStrandedRuns } from './reaper'
 
 /** Up to this many jobs run concurrently per poll (the thesis's "parallel slots"). */
@@ -110,6 +114,20 @@ async function handle(runId: string): Promise<void> {
   const wf = getWorkflow(run.workflowId)
   if (!wf) {
     await markFailed(runId, new EngineError('SKILL_NOT_FOUND', `workflow '${run.workflowId}' not registered`))
+    return
+  }
+
+  // ── Split-brain guard (T7) ─────────────────────────────────────────────────
+  // A run row may outlive its tenant being disabled/deleted between enqueue and
+  // execution. Re-validate the tenant against the registry BEFORE any side effect,
+  // and load its secret_prefix for the provider factories. An unresolvable or
+  // non-active tenant fails the run closed — we never act on a stale tenant.
+  const tenant = await loadTenantSecrets(run.consumerId)
+  if (!tenant.exists || !tenant.active) {
+    await markFailed(
+      runId,
+      new EngineError('TENANT_UNKNOWN', `tenant '${run.consumerId}' is not a resolvable active tenant`),
+    )
     return
   }
 

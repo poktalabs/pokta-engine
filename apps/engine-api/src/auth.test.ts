@@ -94,6 +94,34 @@ vi.mock('drizzle-orm', () => ({
   sql: Object.assign((..._a: unknown[]) => ({}), { raw: () => ({}) }),
 }))
 
+// ── ./tenants registry mock (PR2) ────────────────────────────────────────────
+// resolveTenant now consults the registry: service mode → getTenant(id); privy
+// mode → findTenantByMember(DID). The AUTH assertions below (resolved consumer.id
+// forced onto the run; decidedBy = identity) require both the service tenants
+// (mi-pase / other) AND the Privy DID (did:privy:abc → mi-pase) to resolve as
+// ACTIVE with pricing-draft allow-listed. This mock supplies exactly that — it
+// changes no auth assertion, only the registry resolveTenant reads after auth.
+const SVC_TENANTS: Record<string, { status: 'active'; allowedWorkflows: string[] }> = {
+  'mi-pase': { status: 'active', allowedWorkflows: ['pricing-draft', 'pricing-apply-flagged'] },
+  other: { status: 'active', allowedWorkflows: ['pricing-draft', 'pricing-apply-flagged'] },
+}
+const MEMBER_OF: Record<string, string> = { 'did:privy:abc': 'mi-pase' }
+vi.mock('./tenants', () => ({
+  getTenant: async (id: string) => {
+    const t = SVC_TENANTS[id]
+    return t ? { tenantId: id, name: id, status: t.status, allowedWorkflows: t.allowedWorkflows } : undefined
+  },
+  findTenantByMember: async (did: string) => {
+    const id = MEMBER_OF[did]
+    if (!id) return undefined
+    const t = SVC_TENANTS[id]
+    return t ? { tenantId: id, name: id, status: t.status, allowedWorkflows: t.allowedWorkflows } : undefined
+  },
+  isActive: (row: { status: string }) => row.status === 'active',
+  allowedWorkflowsFor: (row: { allowedWorkflows: string[] }) => row.allowedWorkflows,
+  toTenantView: (row: { tenantId: string }) => ({ id: row.tenantId }),
+}))
+
 // Real workflow registry drives dispatch/approve. We pin to known ids whose input
 // schemas accept `{}` so the auth assertions are never masked by an input 400:
 //   - `pricing-draft` is a public, non-gated POST target with an all-optional

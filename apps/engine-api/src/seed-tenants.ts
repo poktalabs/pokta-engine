@@ -1,0 +1,160 @@
+import { sql } from 'drizzle-orm'
+import { db as defaultDb, schema } from '@godin-engine/db'
+import { listManifests } from '@godin-engine/workflows'
+
+/**
+ * Tenant registry SEED + validation (PR2 T8). Idempotent: an `ON CONFLICT` upsert
+ * keyed on `tenant_id`, safe to run on every deploy (chained after `db:migrate` in
+ * the engine-api preDeployCommand). It seeds the two known tenants and ENFORCES
+ * the registry invariants before any write so a bad row never reaches the table:
+ *
+ *   - every `allowedWorkflows` id MUST exist in the live workflow registry
+ *     (`listManifests()`),
+ *   - `secretPrefix` MUST match `^[A-Z][A-Z0-9_]*$` (the env-var prefix charset),
+ *   - `secretPrefix` MUST be UNIQUE across the seeded tenants.
+ *
+ * This module is NOT a /v1 tenant-data surface — it writes the tenancy CONFIG
+ * table at deploy time (allowlisted in scripts/check-scoped-db.sh, like
+ * tenants.ts). It performs no cross-tenant DATA read/write.
+ */
+
+/** A tenant to seed. Mirrors the engine_tenants insert shape (PR2 §4). */
+export interface TenantSeed {
+  tenantId: string
+  name: string
+  status: 'active' | 'pending' | 'disabled'
+  currency: string
+  locale: string
+  branding: { name: string; badge?: string }
+  allowedWorkflows: string[]
+  members: string[]
+  secretPrefix: string | null
+}
+
+const SECRET_PREFIX_RE = /^[A-Z][A-Z0-9_]*$/
+
+/**
+ * The seed set (PR2 §4):
+ *   - mi-pase  — ACTIVE (the first paid client; real Shopify dev creds).
+ *   - vino     — PENDING (no real creds until PR3; must NOT resolve/dispatch yet).
+ * The allowedWorkflows ids are the REAL M1 / Vino manifest ids; `validateSeeds`
+ * cross-checks them against listManifests() so a workflow rename fails the deploy
+ * loudly rather than silently seeding a dead allow-list entry.
+ */
+export const TENANT_SEEDS: TenantSeed[] = [
+  {
+    tenantId: 'mi-pase',
+    name: 'Mi Pase',
+    status: 'active',
+    currency: 'MXN',
+    locale: 'es-MX',
+    branding: { name: 'Mi Pase', badge: 'Shopify test store' },
+    allowedWorkflows: ['pricing-draft', 'pricing-apply-confident', 'pricing-apply-flagged'],
+    members: [], // Privy DIDs added in PR2b
+    secretPrefix: 'MIPASE',
+  },
+  {
+    tenantId: 'vino',
+    name: 'Vino Design Build',
+    status: 'pending', // NOT active — no real creds until PR3
+    currency: 'USD',
+    locale: 'en',
+    branding: { name: 'Vino Design Build' },
+    allowedWorkflows: ['call-intake', 'proposal-step', 'send-step'],
+    members: [],
+    secretPrefix: 'VINO',
+  },
+]
+
+/**
+ * Validate the seed set against the registry invariants. Throws on the FIRST
+ * violation (fail the deploy) with an actionable message. Exposed for unit tests.
+ */
+export function validateSeeds(seeds: TenantSeed[], manifestIds: string[] = listManifests().map((m) => m.id)): void {
+  const known = new Set(manifestIds)
+  const seenPrefix = new Map<string, string>() // prefix → first tenant that used it
+
+  for (const t of seeds) {
+    // 1) allowed workflows must all exist in the live registry.
+    for (const id of t.allowedWorkflows) {
+      if (!known.has(id)) {
+        throw new Error(
+          `tenant '${t.tenantId}': allowedWorkflows references unknown workflow '${id}' (not in listManifests())`,
+        )
+      }
+    }
+    // 2) secret_prefix charset (when set).
+    if (t.secretPrefix !== null) {
+      if (!SECRET_PREFIX_RE.test(t.secretPrefix)) {
+        throw new Error(
+          `tenant '${t.tenantId}': secretPrefix '${t.secretPrefix}' must match ${SECRET_PREFIX_RE} (^[A-Z][A-Z0-9_]*$)`,
+        )
+      }
+      // 3) secret_prefix uniqueness across tenants.
+      const prior = seenPrefix.get(t.secretPrefix)
+      if (prior) {
+        throw new Error(
+          `secretPrefix '${t.secretPrefix}' is not unique — used by both '${prior}' and '${t.tenantId}'`,
+        )
+      }
+      seenPrefix.set(t.secretPrefix, t.tenantId)
+    }
+  }
+}
+
+/**
+ * Seed (idempotent upsert) the validated tenants into engine_tenants. Re-running
+ * keeps config-managed columns in sync (name/status/branding/allow-list/prefix)
+ * while bumping `updated_at`; `members` is intentionally PRESERVED on conflict so
+ * a re-deploy never wipes DIDs added out-of-band (PR2b). `created_at` is untouched.
+ */
+export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: TenantSeed[] = TENANT_SEEDS): Promise<void> {
+  validateSeeds(seeds)
+  for (const t of seeds) {
+    await db
+      .insert(schema.engineTenants)
+      .values({
+        tenantId: t.tenantId,
+        name: t.name,
+        status: t.status,
+        currency: t.currency,
+        locale: t.locale,
+        branding: t.branding,
+        allowedWorkflows: t.allowedWorkflows,
+        members: t.members,
+        secretPrefix: t.secretPrefix,
+      })
+      .onConflictDoUpdate({
+        target: schema.engineTenants.tenantId,
+        set: {
+          name: t.name,
+          status: t.status,
+          currency: t.currency,
+          locale: t.locale,
+          branding: t.branding,
+          allowedWorkflows: t.allowedWorkflows,
+          secretPrefix: t.secretPrefix,
+          updatedAt: sql`now()`,
+        },
+      })
+  }
+}
+
+/** Deploy entrypoint: `tsx apps/engine-api/src/seed-tenants.ts`. */
+async function main(): Promise<void> {
+  await seedTenants()
+  // eslint-disable-next-line no-console
+  console.log(`[seed-tenants] upserted ${TENANT_SEEDS.length} tenant(s): ${TENANT_SEEDS.map((t) => t.tenantId).join(', ')}`)
+}
+
+// Only run when invoked as the script entrypoint (importing for tests must NOT
+// connect to the DB or seed). tsx sets import.meta.url to the run file's URL.
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  main()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error('[seed-tenants] failed', e)
+      process.exit(1)
+    })
+}
