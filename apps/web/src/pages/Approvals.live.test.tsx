@@ -162,6 +162,52 @@ describe('APPROVALS LIVE — GET /v1/approvals real list (no mock registry)', ()
   })
 })
 
+describe('APPROVALS LIVE — a mipase batch-envelope artifact does not white-screen the queue', () => {
+  it('a mipase.* approval whose artifact is the BATCH ENVELOPE (not a flat row) renders an honest cell, not a crash', async () => {
+    // The page selects the batch renderer purely by `workflowId` domain (mipase*),
+    // with NO artifact-shape check. The backend serves the raw draft output as the
+    // approval artifact — for daily-pricing that is the BATCH ENVELOPE
+    // `{kind, target, rows}`, NOT the flattened single row the renderer expects.
+    // A blind `artifact as BatchPricingRow` + `row.product.length` would
+    // `undefined.length` → throw → white screen. The hardened `rowOf` narrows and
+    // renders an "Unrecognized artifact" cell instead; the surface stays mounted.
+    const envelopeApproval: ApprovalView = {
+      approvalId: 'apr_mipase_batch_001',
+      sourceRunId: 'run_pricing_draft_9001',
+      workflowId: 'mipase.daily-pricing',
+      state: 'pending',
+      createdAt: '2026-06-08T12:00:00.000Z',
+      artifact: {
+        kind: 'mipase.daily-pricing',
+        target: { channel: 'shopify', store: 'mi-pase-test', testStore: true },
+        analyzedCount: 1284,
+        autoAppliedCount: 248,
+        rows: [{ id: 'row-1', product: 'Apple iPhone 15 Pro', currentPrice: 25999 }],
+      },
+    }
+    mockLivePath('GET', '/v1/approvals', {
+      status: 200,
+      body: { approvals: [envelopeApproval] },
+    })
+
+    renderWithProviders(<Approvals />)
+
+    // The batch renderer mounted (mipase domain) and the page did NOT throw. The
+    // batch action bar (rendered unconditionally, OUTSIDE the windowed `Virtuoso`
+    // body) proves the page stood up on a malformed envelope artifact. NOTE: the
+    // per-ROW crash guard (`BatchRow` on a non-row artifact) is exercised directly
+    // in BatchApprovalRenderer.unrecognized.test.tsx — `Virtuoso` does not lay out
+    // rows in jsdom, so the row body can't be asserted through the page here.
+    await waitFor(() => {
+      expect(screen.getByText(/flagged rows selected/i)).toBeInTheDocument()
+    })
+    // The surface itself is still mounted (no thrown render → no white screen).
+    expect(screen.getByRole('heading', { name: /approvals/i })).toBeInTheDocument()
+    // It came from the live path, not the mock registry.
+    expect(liveCalls('GET', '/v1/approvals').length).toBeGreaterThanOrEqual(1)
+  })
+})
+
 describe('APPROVALS LIVE — approve fires POST /v1/approvals/:id/approve', () => {
   it('clicking a card Approve POSTs the live approve path for that id (real mutation, not the mock registry)', async () => {
     // Both pending ids are approve-able; register both POST routes so whichever the

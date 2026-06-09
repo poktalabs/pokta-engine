@@ -1,5 +1,10 @@
 import { Suspense, lazy } from 'react'
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
+import {
+  createBrowserRouter,
+  Navigate,
+  RouterProvider,
+  useRouteError,
+} from 'react-router-dom'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { AccessDenied } from '@/components/auth/AccessDenied'
@@ -27,6 +32,36 @@ function RootRedirect() {
   }
   return <Navigate to={`/${tenant.id}/approvals`} replace />
 }
+/**
+ * Route-level error backstop (D3 — defense in depth). React Router renders this
+ * `errorElement` when a CHILD surface THROWS during render — the realistic failure
+ * mode when the SPA is wired to a young backend that returns a 200 with a malformed
+ * payload (a kind-tagged-but-incomplete run output, a batch-envelope artifact where
+ * a row was expected, etc.). The per-surface narrows already degrade those cleanly;
+ * this boundary is the systemic catch-all so a render throw degrades to a recoverable
+ * ErrorState inside the shell instead of unmounting the whole app to a white screen.
+ * (Query isPending/isError states are handled per-surface; only THROWS reach here.)
+ */
+function RouteErrorBoundary() {
+  const err = useRouteError()
+  return (
+    <section className="space-y-6 py-8">
+      <ErrorState
+        title="Something went wrong on this page"
+        error={{
+          code: 'SKILL_EXEC_ERROR',
+          message:
+            err instanceof Error
+              ? err.message
+              : 'This page hit an unexpected error. Try reloading.',
+          retryable: true,
+        }}
+        onRetry={() => window.location.reload()}
+      />
+    </section>
+  )
+}
+
 const AppShell = lazy(() =>
   import('@/components/shell/AppShell').then((m) => ({ default: m.AppShell })),
 )
@@ -48,6 +83,7 @@ const router = createBrowserRouter([
   {
     path: '/:tenant',
     element: <AppShell />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <Navigate to="approvals" replace /> },
       { path: 'approvals', element: <Approvals /> },

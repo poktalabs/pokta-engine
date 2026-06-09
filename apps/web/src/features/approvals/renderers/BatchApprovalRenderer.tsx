@@ -114,9 +114,30 @@ function formatPct(pct: number): string {
   return `${sign}${pct.toFixed(1)}%`
 }
 
-/** Pull the renderer-owned row shape back off the opaque `ApprovalView`. */
-function rowOf(item: ApprovalView): BatchPricingRow {
-  return item.artifact as BatchPricingRow
+/**
+ * Pull the renderer-owned row shape back off the opaque `ApprovalView`, defensively.
+ *
+ * `ApprovalView.artifact` is `unknown` (the raw server-stored draft). The page
+ * selects THIS renderer purely by `workflowId` domain (`mipase*`) with NO shape
+ * check — so a live `mipase.*` approval whose artifact is the BATCH ENVELOPE
+ * (`{kind, target, rows}`), or any other non-row payload, would arrive here. A
+ * blind `as BatchPricingRow` cast followed by `row.product.length` would then
+ * `undefined.length` → throw → white screen (there is no app-wide error boundary).
+ * We narrow instead and return `null` on mismatch so the row renders an honest
+ * "Unrecognized artifact" cell, mirroring `SingleActionRenderer.asArtifact`.
+ */
+function rowOf(item: ApprovalView): BatchPricingRow | null {
+  const a = item.artifact
+  if (
+    a &&
+    typeof a === 'object' &&
+    typeof (a as { product?: unknown }).product === 'string' &&
+    typeof (a as { currentPrice?: unknown }).currentPrice === 'number' &&
+    typeof (a as { suggestedPrice?: unknown }).suggestedPrice === 'number'
+  ) {
+    return a as BatchPricingRow
+  }
+  return null
 }
 
 export function BatchApprovalRenderer(props: ApprovalRendererProps) {
@@ -350,6 +371,22 @@ interface BatchRowProps {
 
 function BatchRow({ index, item, checked, failed, disabled, onToggle }: BatchRowProps) {
   const row = rowOf(item)
+  // Defensive: an item whose artifact isn't a row shape (e.g. a live batch envelope
+  // or any other payload). Surface it rather than dereference `undefined` and crash
+  // the whole virtualized list — the rest of the queue still renders.
+  if (!row) {
+    return (
+      <div
+        role="row"
+        data-row-index={index}
+        aria-rowindex={index + 2 /* header is logical row 1 */}
+        aria-invalid="true"
+        className="border-b border-[var(--status-fail-line)] bg-[var(--status-fail-bg)] px-4 py-3 text-sm text-[var(--status-fail)]"
+      >
+        Unrecognized artifact for {item.approvalId}. Cannot render this row.
+      </div>
+    )
+  }
   const longName = row.product.length > 40
   const checkboxId = `batch-select-${item.approvalId}`
 

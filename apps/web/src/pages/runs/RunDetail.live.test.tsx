@@ -247,6 +247,27 @@ describe('RUN DETAIL ★ — graceful degradation (D3): 404 / error never white-
     expect(screen.queryByRole('button', { name: /re-run/i })).not.toBeInTheDocument()
   })
 
+  it('a kind-tagged run MISSING its flagged/applied arrays renders the clean summary, not a throw', async () => {
+    mockLivePath('GET', '/v1/tenants/me', { status: 200, body: MI_PASE_VIEW })
+    // A young backend can tag the output `kind` before the arrays/counts are
+    // populated (an early/failed/partial run). The page must require the FULL shape
+    // before rendering the rich tiles — a kind-only narrow would `undefined.map()`
+    // the absent `flagged`/`applied` and white-screen. Here the kind is present but
+    // the arrays are not, so it must fall through to the empty summary.
+    mockLivePath('GET', `/v1/runs/${RUN_ID}`, {
+      status: 200,
+      body: { ...SERVER_RUN, output: { kind: 'mipase.daily-pricing' } },
+    })
+
+    renderWithProviders(runHarness(RUN_ID))
+
+    // The header (and run id) still render — no throw, no white screen.
+    await waitFor(() => expect(screen.getByText(RUN_ID)).toBeInTheDocument())
+    // The rich tiles did NOT render (the partial payload was rejected by the narrow).
+    expect(screen.queryByText('Products analyzed')).not.toBeInTheDocument()
+    expect(screen.getByText(/no run summary yet/i)).toBeInTheDocument()
+  })
+
   it('a non-pricing / output-less run renders a clean summary, not a crash', async () => {
     mockLivePath('GET', '/v1/tenants/me', { status: 200, body: MI_PASE_VIEW })
     // A run whose output is NOT the daily-pricing shape (or absent) must still render

@@ -29,7 +29,18 @@ import { useRerunWorkflow, useRunDetail } from './use-run-detail'
 
 const WORKFLOW_NAME = 'Daily Pricing'
 
-/** Narrow the opaque run `output` to the daily-pricing shape, defensively. */
+/**
+ * Narrow the opaque run `output` to the daily-pricing shape, defensively.
+ *
+ * The `kind` tag alone is NOT enough: a real run can tag its output before the
+ * arrays/counts are populated (an early-aborted, failed, or partial run can emit
+ * `{kind:'mipase.daily-pricing'}` with `flagged`/`applied` absent). The rich tiles
+ * + callouts then `.map()` those arrays — so a kind-only narrow would `undefined.map`
+ * → throw → white screen (there is no app-wide error boundary). We therefore require
+ * the full shape (both arrays present + the numeric counts) before returning the
+ * rich output; a partial payload falls through to the clean "No run summary yet"
+ * EmptyState branch instead of crashing.
+ */
 function asPricingOutput(run: RunDetailRow): PricingRunOutput | null {
   const out = run.output
   if (
@@ -37,7 +48,17 @@ function asPricingOutput(run: RunDetailRow): PricingRunOutput | null {
     typeof out === 'object' &&
     (out as { kind?: unknown }).kind === 'mipase.daily-pricing'
   ) {
-    return out as PricingRunOutput
+    const o = out as Partial<PricingRunOutput>
+    if (
+      Array.isArray(o.flagged) &&
+      Array.isArray(o.applied) &&
+      typeof o.analyzedCount === 'number' &&
+      typeof o.autoAppliedCount === 'number' &&
+      typeof o.needsReviewCount === 'number' &&
+      typeof o.noChangeCount === 'number'
+    ) {
+      return out as PricingRunOutput
+    }
   }
   return null
 }
