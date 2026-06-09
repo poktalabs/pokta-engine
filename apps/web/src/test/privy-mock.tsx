@@ -33,12 +33,15 @@ export interface PrivyMockState {
   authenticated: boolean
   /** The access token `getAccessToken()` resolves to (null = no Bearer header). */
   token: string | null
+  /** The linked email surfaced as `usePrivy().user.email.address` (null = no email). */
+  email: string | null
 }
 
 const DEFAULT_STATE: PrivyMockState = {
   ready: true,
   authenticated: true,
   token: 'test-privy-jwt',
+  email: 'dev@poktalabs.com',
 }
 
 /** Mutable, test-controlled Privy state. Read lazily by `usePrivy()`. */
@@ -70,6 +73,8 @@ export function resetPrivyMock(): void {
 export interface UsePrivyMock {
   ready: boolean
   authenticated: boolean
+  /** Subset of the Privy `User` our shell reads (`user.email.address`). */
+  user: { email: { address: string } } | null
   login: typeof privyMockSpies.login
   logout: typeof privyMockSpies.logout
   getAccessToken: typeof privyMockSpies.getAccessToken
@@ -80,6 +85,7 @@ export function usePrivyMock(): UsePrivyMock {
   return {
     ready: privyMockState.ready,
     authenticated: privyMockState.authenticated,
+    user: privyMockState.email ? { email: { address: privyMockState.email } } : null,
     login: privyMockSpies.login,
     logout: privyMockSpies.logout,
     getAccessToken: privyMockSpies.getAccessToken,

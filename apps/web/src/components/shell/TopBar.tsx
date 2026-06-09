@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
 import { ChevronDown, UserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TenantHeader } from '@/components/shell/TenantHeader'
@@ -9,12 +10,16 @@ import { useT } from '@/i18n'
  * Sticky top bar (P1): co-branding lockup on the left, locale toggle + user menu
  * on the right. 68px bar to match the landing-page header proportions.
  *
- * The user menu is a lightweight disclosure for M2 (Privy wires real identity +
- * sign-out in P6); it shows a placeholder operator + a sign-out affordance.
+ * The user menu shows the REAL signed-in principal: the Privy account's linked
+ * email (`usePrivy().user`), and "Sign out" calls Privy `logout()` (which drops the
+ * AuthGate back to the login screen). Falls back to the generic operator label only
+ * when no email is linked.
  */
 export function TopBar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const t = useT()
+  const { user, logout } = usePrivy()
+  const account = user?.email?.address ?? t('shell.user.operator')
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--rule)] bg-[var(--background)]">
@@ -33,7 +38,7 @@ export function TopBar() {
               className="flex cursor-pointer items-center gap-2 border border-[var(--rule)] bg-[var(--surface)] px-2.5 py-1.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--surface-2)]"
             >
               <UserRound className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">{t('shell.user.operator')}</span>
+              <span className="hidden max-w-[16rem] truncate sm:inline">{account}</span>
               <ChevronDown
                 className={cn('size-3.5 transition-transform', menuOpen && 'rotate-180')}
                 aria-hidden="true"
@@ -47,13 +52,16 @@ export function TopBar() {
               >
                 <div className="border-b border-[var(--border)] px-3 py-2.5 text-xs text-[var(--muted-foreground)]">
                   {t('shell.user.signedInAs')}
-                  <div className="font-medium text-[var(--foreground)]">operator@tenant</div>
+                  <div className="truncate font-medium text-[var(--foreground)]">{account}</div>
                 </div>
                 <button
                   type="button"
                   role="menuitem"
                   className="w-full cursor-pointer px-3 py-2.5 text-left text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--surface-2)]"
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    void logout()
+                  }}
                 >
                   {t('shell.user.signOut')}
                 </button>
