@@ -21,7 +21,7 @@ export interface RunDetailHeaderProps {
   workflowName: string
   /** Whether the run is holding prices at the gate (drives the pill copy). */
   heldAtGate: boolean
-  /** Base path for breadcrumb links, e.g. `/mipase`. */
+  /** Base path for breadcrumb links, e.g. `/mi-pase`. */
   basePath: string
   onRerun: () => void
 }

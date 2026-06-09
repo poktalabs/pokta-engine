@@ -1,18 +1,32 @@
 import { Suspense, lazy } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { LoadingState } from '@/components/ui/LoadingState'
-import { DEFAULT_TENANT } from '@/providers/TenantProvider'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { AccessDenied } from '@/components/auth/AccessDenied'
+import { useTenantContext } from '@/providers/TenantProvider'
 
 /**
- * Route tree (P1-B owns this file). The tenant-agnostic Shell mounts under
- * `/:tenant`; surfaces are lazy-loaded behind `<Suspense>`. The tenant segment
- * scopes the URL — the active TenantProvider (in AppProviders) drives config /
- * theming. M2 defaults to Mi Pase; flipping the provider swaps lockup + nav with
- * zero CSS change (P4-Z).
- *
- * P2 Approvals, P3 Workflows/Runs, and P4 Integrations/Reports/Settings now
- * mount their real surfaces (from `pages/<surface>/*`) behind `<Suspense>`.
+ * Route tree (PR2b W4). The tenant-agnostic Shell mounts under `/:tenant`;
+ * surfaces are lazy-loaded behind `<Suspense>`. The tenant segment is DISPLAY /
+ * deep-link only — the SERVER (`/v1/tenants/me`, via TenantProvider) is the tenant
+ * authority. The root `/` redirect derives from the SERVER tenant id (waiting for
+ * the query), never a static default; AppShell redirects a `/:tenant` segment that
+ * disagrees with the server.
  */
+
+/**
+ * Root `/` redirect (W4) — derives the landing URL from the SERVER tenant, never a
+ * static `DEFAULT_TENANT`. Waits for `/v1/tenants/me`; fail-closed on 403.
+ */
+function RootRedirect() {
+  const { tenant, status, refetch } = useTenantContext()
+  if (status === 'loading') return <LoadingState label="Loading workspace…" />
+  if (status === 'access-denied') return <AccessDenied />
+  if (status === 'error' || !tenant) {
+    return <ErrorState title="Could not load your workspace" onRetry={refetch} />
+  }
+  return <Navigate to={`/${tenant.id}/approvals`} replace />
+}
 const AppShell = lazy(() =>
   import('@/components/shell/AppShell').then((m) => ({ default: m.AppShell })),
 )
@@ -29,7 +43,7 @@ const NotFound = lazy(() => import('@/pages/NotFound'))
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to={`/${DEFAULT_TENANT}/approvals`} replace />,
+    element: <RootRedirect />,
   },
   {
     path: '/:tenant',

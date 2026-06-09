@@ -14,10 +14,14 @@ import { EngineError } from '@godin-engine/contract'
  *
  *   BROWSER  — header `Authorization: Bearer <privyJwt>`. Verified with
  *              @privy-io/server-auth (NEVER hand-rolled JWT crypto). The verified
- *              Privy userId (DID) is the identity. The tenant is resolved from the
- *              optional PRIVY_TENANT_MAP env. A principal that maps to no tenant is
- *              STILL authenticated (consumer.id = '' ); the dispatch tenant-check
- *              (T2 resolveTenant) is what rejects it with TENANT_UNKNOWN.
+ *              Privy userId (DID) is the identity. The TENANT is resolved ONLY from
+ *              membership (`engine_tenants.members[]` via resolveTenant →
+ *              findTenantByMember) — the optional PRIVY_TENANT_MAP env is a legacy
+ *              deploy seam, NOT a scope key: it merely seeds `consumer.id`, which
+ *              the route layer asserts-agrees-or-rejects against the resolved tenant
+ *              (PR2b B1(b)). A principal that maps to no tenant is STILL
+ *              authenticated (consumer.id = '' ); the dispatch tenant-check
+ *              (resolveTenant) is what rejects it with TENANT_UNKNOWN.
  *
  * There is NO "SERVICE_KEYS unset → allow all" dev bypass anymore: no credential
  * (or a bad one) is always 401 UNAUTHENTICATED.
@@ -142,6 +146,15 @@ export function consumerAuth(opts: AuthOptions = {}): MiddlewareHandler {
         // expired / wrong-audience / bad-signature / unreachable JWKS → fail closed.
         return unauth(c, 'invalid or expired bearer token')
       }
+      // PRIVY_TENANT_MAP posture (PR2b B1(b), assert-agreement-or-reject):
+      // For a Privy principal the SOLE tenant authority is `members[]`, resolved
+      // downstream by resolveTenant → findTenantByMember(identity). This legacy env
+      // map is NOT trusted to scope data; it is kept ONLY as a fast deploy seam and
+      // is reconciled at the route layer — app.ts fails closed (TENANT_UNKNOWN) when
+      // a NON-EMPTY consumer.id disagrees with the membership-resolved tenant
+      // (confused-deputy guard; pinned by privy-split-brain.test.ts). Unset map →
+      // consumer.id='' → the route scopes purely off the resolved tenant. We
+      // therefore carry the mapped id (or '') for the guard, never as a scope key.
       const tenantId = tenantMap.get(claims.userId) ?? ''
       c.set('consumer', {
         id: tenantId,
