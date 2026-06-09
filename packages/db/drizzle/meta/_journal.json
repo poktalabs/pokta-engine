@@ -29,6 +29,13 @@
       "when": 1781022047476,
       "tag": "0003_blushing_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781044036889,
+      "tag": "0004_skinny_fixer",
+      "breakpoints": true
     }
   ]
 }

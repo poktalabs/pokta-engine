@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { listManifests } from '@godin-engine/workflows'
-import { listIntegrations } from '@godin-engine/integrations'
 
 /**
  * TENANTS/ME block (T6 / §6) — drives `GET /v1/tenants/me` on `buildApp()`.
@@ -157,7 +156,6 @@ describe('GET /v1/tenants/me — authed tenant profile (T6)', () => {
       locale: string
       branding: { name: string; badge?: string }
       allowedWorkflows: string[]
-      integrations: string[]
     }
     expect(view.id).toBe('mi-pase')
     expect(view.name).toBe('Mi Pase')
@@ -213,20 +211,6 @@ describe('GET /v1/tenants/me — authed tenant profile (T6)', () => {
     const view = (await res.json()) as { allowedWorkflows: string[] }
     expect(view.allowedWorkflows).not.toContain('ghost-workflow-not-real')
     expect([...view.allowedWorkflows].sort()).toEqual([...MIPASE_WORKFLOWS].sort())
-  })
-
-  it('integrations is a string[] validated against the live integration registry', async () => {
-    store.tenants = [MIPASE]
-    const app = buildApp()
-    const res = await app.request('/v1/tenants/me', { headers: MIPASE_KEY })
-    const view = (await res.json()) as { integrations: string[] }
-    expect(Array.isArray(view.integrations)).toBe(true)
-    expect(view.integrations.every((i) => typeof i === 'string')).toBe(true)
-    // Every surfaced integration id MUST be a real id from listIntegrations() —
-    // the view never invents an integration the engine does not ship.
-    const liveIds = new Set(listIntegrations().map((d) => d.id))
-    expect(view.integrations.length).toBeGreaterThan(0)
-    expect(view.integrations.every((i) => liveIds.has(i))).toBe(true)
   })
 
   it('unauthenticated (no credential) → 401 UNAUTHENTICATED', async () => {

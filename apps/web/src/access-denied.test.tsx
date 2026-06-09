@@ -43,7 +43,6 @@ const MI_PASE_VIEW: TenantView = {
   locale: 'es-MX',
   branding: { name: 'Mi Pase', badge: 'Shopify test store' },
   allowedWorkflows: ['pricing-draft'],
-  integrations: [],
 }
 
 /** Mount AppShell (the router-level tenant gate) under a `/:tenant` route. */

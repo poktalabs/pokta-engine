@@ -30,7 +30,6 @@ const MI_PASE_VIEW: TenantView = {
   locale: 'es-MX',
   branding: { name: 'Mi Pase', badge: 'Shopify test store' },
   allowedWorkflows: ['pricing-draft'],
-  integrations: [],
 }
 
 const router = (children: ReactNode) => <MemoryRouter initialEntries={['/mi-pase']}>{children}</MemoryRouter>

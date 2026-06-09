@@ -156,3 +156,39 @@ export const engineTenants = pgTable(
     uniqueIndex('tenants_secret_prefix_unique').on(t.secretPrefix),
   ],
 )
+
+/**
+ * Per-tenant integration CONNECTION status (P5b). The desired/actual wiring state
+ * of each provider for a tenant, keyed `(tenant_id, integration_id)`. This is the
+ * source of truth for `GET /v1/integrations` — NOT secrets (P5b dropped the
+ * `secret_ref` column; provider secrets stay worker-only env, never here).
+ *
+ *   - `status` — 'enabled' (connected/active) | 'pending' (desired, not yet
+ *     connected) | 'disabled' (explicitly off; the row is KEPT as audit, never
+ *     deleted).
+ *   - `connected_at` — set ONCE when the integration first goes 'enabled', then
+ *     preserved; null while pending/disabled-from-the-start.
+ *
+ * FK → engine_tenants(tenant_id) ON DELETE CASCADE (Codex#5): dropping a tenant
+ * drops its integration rows.
+ */
+export const integrationConnectionStatus = pgEnum('integration_connection_status', [
+  'enabled',
+  'pending',
+  'disabled',
+])
+
+export const engineTenantIntegrations = pgTable(
+  'engine_tenant_integrations',
+  {
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => engineTenants.tenantId, { onDelete: 'cascade' }),
+    integrationId: text('integration_id').notNull(),
+    status: integrationConnectionStatus('status').notNull().default('pending'),
+    connectedAt: timestamp('connected_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.integrationId] })],
+)

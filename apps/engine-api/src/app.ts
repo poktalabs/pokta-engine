@@ -5,11 +5,18 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { EngineError } from '@godin-engine/contract'
 import { db } from '@godin-engine/db'
 import { gatedTargets as gatedTargetsOf, getWorkflow, listManifests } from '@godin-engine/workflows'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import { getIntegration } from '@godin-engine/integrations'
+import type {
+  WorkflowManifest,
+  WorkspaceWorkflowsResponse,
+  IntegrationListResponse,
+  IntegrationStatus,
+} from '@godin-engine/contract'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { consumerAuth, type AuthOptions, type Consumer } from './auth'
 import { forConsumer, resolveTenant } from './scoped-db'
 import { allowedWorkflowsFor, toTenantView, type TenantRow } from './tenants'
+import { cardsForTenant, familyMemberIds } from './workspace-cards'
 import { mountDemo } from './demo'
 import { mountDashboard } from './dashboard'
 import { mountConsole } from './console'
@@ -260,6 +267,82 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
     const scoped = forConsumer(db, tenantId)
     const rows = await scoped.listRuns({ status: c.req.query('status') })
     return c.json({ runs: rows })
+  })
+
+  /**
+   * GET /v1/workspace/workflows (P5b) — the operator workspace's workflow CARDS for
+   * this tenant: the catalog families whose PARENT id is in the tenant's allow-list,
+   * each folded with this tenant's recent run + pending-approval state. Resolves the
+   * tenant ROW (for allowedWorkflowsFor) with the SAME confused-deputy guard
+   * scopedTenantId applies, then scopes the read via forConsumer. Fail-closed.
+   */
+  app.get('/v1/workspace/workflows', async (c) => {
+    const consumer = c.get('consumer')
+    const resolved = await resolveTenant(consumer)
+    if (!resolved.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const tenantId = resolved.tenant.tenantId
+    if (consumer.mode === 'privy' && consumer.id && consumer.id !== tenantId) {
+      return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    }
+    const cards = cardsForTenant(allowedWorkflowsFor(resolved.tenant))
+    const scoped = forConsumer(db, tenantId)
+    const workflows = await scoped.workspaceWorkflowCards(cards)
+    return c.json({ workflows } satisfies WorkspaceWorkflowsResponse)
+  })
+
+  /**
+   * GET /v1/workflows/:id/runs?status= (P5b) — this tenant's runs for the workflow
+   * FAMILY rooted at `:id`. ANTI-ENUMERATION: an id not in the tenant's allow-list is
+   * a 404 SKILL_NOT_FOUND (matches the dispatch gate; never confirm existence). The
+   * family members (parent + gated children) are resolved via familyMemberIds, so a
+   * parent card's runs include its children's runs. Returns the RunListResponse
+   * `{ runs }` envelope for consistency with GET /v1/runs.
+   */
+  app.get('/v1/workflows/:id/runs', async (c) => {
+    const consumer = c.get('consumer')
+    const resolved = await resolveTenant(consumer)
+    if (!resolved.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const tenantId = resolved.tenant.tenantId
+    if (consumer.mode === 'privy' && consumer.id && consumer.id !== tenantId) {
+      return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    }
+    const id = c.req.param('id')
+    if (!allowedForTenant(resolved.tenant, id)) {
+      return fail(c, new EngineError('SKILL_NOT_FOUND', `workflow '${id}' not found`))
+    }
+    const members = familyMemberIds(id)
+    const scoped = forConsumer(db, tenantId)
+    let rows = await scoped.listRunsForWorkflows(members)
+    const status = c.req.query('status')
+    if (status) rows = rows.filter((r) => r.status === status)
+    // `{ runs }` envelope mirrors GET /v1/runs; rows are raw engine_runs rows that
+    // JSON-serialize to the RunListResponse shape (Date → ISO string) like that route.
+    return c.json({ runs: rows })
+  })
+
+  /**
+   * GET /v1/integrations (P5b) — this tenant's integration CONNECTION status rows,
+   * enriched with the live registry descriptor (displayName/category). A stored row
+   * whose integration_id is no longer in the live registry is SKIPPED (defensive).
+   * NO secret value is ever returned. Scoped via forConsumer; fail-closed.
+   */
+  app.get('/v1/integrations', async (c) => {
+    const tenantId = await scopedTenantId(c.get('consumer'))
+    if (tenantId === null) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const scoped = forConsumer(db, tenantId)
+    const rows = await scoped.listTenantIntegrations()
+    const integrations: IntegrationStatus[] = []
+    for (const row of rows) {
+      const mod = getIntegration(row.integrationId)
+      if (!mod) continue // not in the live registry → skip (defensive)
+      integrations.push({
+        id: row.integrationId,
+        displayName: mod.descriptor.displayName,
+        category: mod.descriptor.category,
+        status: row.status,
+      })
+    }
+    return c.json({ integrations } satisfies IntegrationListResponse)
   })
 
   /** GET /v1/approvals?state=pending&approver=role:medic — this tenant's gate worklist (D-8). */

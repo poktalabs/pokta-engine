@@ -24,9 +24,11 @@ export type TenantBranding = z.infer<typeof tenantBrandingSchema>
  *
  *   - `branding` is the TYPED branding (not the raw jsonb column),
  *   - `allowedWorkflows` is already FILTERED to this tenant's allow-list ∩ the
- *     live workflow registry (the SPA never sees a workflow it cannot dispatch),
- *   - `integrations` is the list of integration ids this tenant has, VALIDATED /
- *     enriched against the live integration registry (`listIntegrations()`).
+ *     live workflow registry (the SPA never sees a workflow it cannot dispatch).
+ *
+ * Integrations are NO LONGER part of this view (D-Codex#4 / P5b) — the tenant's
+ * per-integration connection status is its own surface (`GET /v1/integrations`,
+ * backed by `engine_tenant_integrations`), not derived from the live registry here.
  *
  * Deliberately omits `members` and `secretPrefix` — those are server-only authz /
  * ops fields and never leave the engine.
@@ -39,6 +41,5 @@ export const tenantViewSchema = z.object({
   locale: z.string(),
   branding: tenantBrandingSchema,
   allowedWorkflows: z.array(z.string()),
-  integrations: z.array(z.string()),
 })
 export type TenantView = z.infer<typeof tenantViewSchema>

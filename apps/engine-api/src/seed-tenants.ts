@@ -1,6 +1,7 @@
-import { sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import { listManifests } from '@godin-engine/workflows'
+import { listIntegrations } from '@godin-engine/integrations'
 
 /**
  * Tenant registry SEED + validation (PR2 T8). Idempotent: an `ON CONFLICT` upsert
@@ -190,9 +191,137 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
   }
 }
 
+// ── Per-tenant integration seed (P5b) ────────────────────────────────────────
+
+/** A connection status as stored in `engine_tenant_integrations.status`. */
+export type IntegrationSeedStatus = 'enabled' | 'pending' | 'disabled'
+
+/** One desired integration connection for a tenant (parsed from env). */
+export interface IntegrationSeedEntry {
+  integrationId: string
+  status: IntegrationSeedStatus
+}
+
+const INTEGRATION_STATUSES: readonly IntegrationSeedStatus[] = ['enabled', 'pending', 'disabled']
+
+/**
+ * Parse a tenant's `${secretPrefix}_INTEGRATIONS` env value (P5b, mirrors
+ * `envMemberDids`). Format: comma-separated `id:status` pairs, e.g.
+ * `shopify:enabled,mercado-libre:pending`. A bare `id` (no `:status`) defaults to
+ * `'enabled'`. Trims, drops empty pairs. Does NOT validate against the registry
+ * (that is `validateIntegrationSeeds`) — a pair whose status string is not a known
+ * status is kept VERBATIM here so the validator can reject it loudly.
+ *
+ * An unset/blank env → `[]`. Later pairs for the same id WIN (last-write).
+ */
+export function parseIntegrationSeed(raw: string | undefined): IntegrationSeedEntry[] {
+  if (!raw?.trim()) return []
+  const out = new Map<string, IntegrationSeedStatus>()
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const idx = trimmed.indexOf(':')
+    const integrationId = (idx === -1 ? trimmed : trimmed.slice(0, idx)).trim()
+    if (!integrationId) continue
+    const statusRaw = idx === -1 ? 'enabled' : trimmed.slice(idx + 1).trim()
+    out.set(integrationId, (statusRaw || 'enabled') as IntegrationSeedStatus)
+  }
+  return [...out].map(([integrationId, status]) => ({ integrationId, status }))
+}
+
+/**
+ * Validate parsed integration seed entries. THROWS on the FIRST violation (fail
+ * the deploy loudly — never silently skip):
+ *   - every `integrationId` MUST exist in the live integration registry
+ *     (`listIntegrations()`),
+ *   - every `status` MUST be one of enabled | pending | disabled.
+ */
+export function validateIntegrationSeeds(
+  entries: IntegrationSeedEntry[],
+  integrationIds: string[] = listIntegrations().map((d) => d.id),
+): void {
+  const known = new Set(integrationIds)
+  for (const e of entries) {
+    if (!known.has(e.integrationId)) {
+      throw new Error(
+        `integration seed references unknown integration '${e.integrationId}' (not in listIntegrations())`,
+      )
+    }
+    if (!INTEGRATION_STATUSES.includes(e.status)) {
+      throw new Error(
+        `integration seed for '${e.integrationId}' has invalid status '${e.status}' (must be ${INTEGRATION_STATUSES.join(' | ')})`,
+      )
+    }
+  }
+}
+
+/**
+ * Seed (idempotent upsert) per-tenant integration connections from env
+ * (`${secretPrefix}_INTEGRATIONS`). For each tenant with a non-null secretPrefix:
+ *
+ *   1) UPSERT each desired (tenant_id, integration_id): set status from the seed,
+ *      bump updated_at; `connected_at` is set ONCE on the first 'enabled' (then
+ *      preserved, untouched for pending/disabled).
+ *   2) Any EXISTING row for the tenant whose integration_id is NOT in the desired
+ *      set is flipped to status='disabled' (NEVER deleted — keep the audit row).
+ *
+ * A tenant with an unset/blank `${secretPrefix}_INTEGRATIONS` desires nothing →
+ * its existing rows are all disabled (no rows inserted). Raw db access is fine
+ * here (this module is allowlisted in scripts/check-scoped-db.sh).
+ */
+export async function seedTenantIntegrations(
+  db: typeof defaultDb = defaultDb,
+  seeds: TenantSeed[] = TENANT_SEEDS,
+): Promise<void> {
+  const I = schema.engineTenantIntegrations
+  for (const t of seeds) {
+    if (t.secretPrefix === null) continue
+    const desired = parseIntegrationSeed(process.env[`${t.secretPrefix}_INTEGRATIONS`])
+    validateIntegrationSeeds(desired)
+
+    for (const e of desired) {
+      await db
+        .insert(I)
+        .values({
+          tenantId: t.tenantId,
+          integrationId: e.integrationId,
+          status: e.status,
+          connectedAt: e.status === 'enabled' ? new Date() : null,
+        })
+        .onConflictDoUpdate({
+          target: [I.tenantId, I.integrationId],
+          set: {
+            status: sql`excluded.status`,
+            updatedAt: sql`now()`,
+            // connected_at: set ONCE on first 'enabled', preserved after, untouched
+            // for pending/disabled.
+            connectedAt: sql`case when excluded.status = 'enabled' then coalesce(${I.connectedAt}, now()) else ${I.connectedAt} end`,
+          },
+        })
+    }
+
+    // Disable (never delete) any existing row not in the desired set — audit row stays.
+    const desiredIds = desired.map((e) => e.integrationId)
+    const existing = await db
+      .select({ integrationId: I.integrationId })
+      .from(I)
+      .where(eq(I.tenantId, t.tenantId))
+    const toDisable = existing
+      .map((r) => r.integrationId)
+      .filter((id) => !desiredIds.includes(id))
+    if (toDisable.length > 0) {
+      await db
+        .update(I)
+        .set({ status: 'disabled', updatedAt: sql`now()` })
+        .where(and(eq(I.tenantId, t.tenantId), inArray(I.integrationId, toDisable)))
+    }
+  }
+}
+
 /** Deploy entrypoint: `tsx apps/engine-api/src/seed-tenants.ts`. */
 async function main(): Promise<void> {
   await seedTenants()
+  await seedTenantIntegrations()
   // eslint-disable-next-line no-console
   console.log(`[seed-tenants] upserted ${TENANT_SEEDS.length} tenant(s): ${TENANT_SEEDS.map((t) => t.tenantId).join(', ')}`)
 }
