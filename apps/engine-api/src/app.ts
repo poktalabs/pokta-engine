@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { EngineError } from '@godin-engine/contract'
@@ -78,9 +79,41 @@ export function operatorAuth(): MiddlewareHandler {
   }
 }
 
+/**
+ * Browser CORS for the `/v1` data plane. The SPA (a different origin in prod)
+ * calls the engine cross-origin — without CORS the browser blocks the request and
+ * the Privy login never reaches `/v1/tenants/me`. (Local dev is same-origin via the
+ * Vite proxy, so this only matters on a real deploy.)
+ *
+ * Fail-closed: allowed origins come from `CORS_ORIGINS` (comma-separated). Unset →
+ * EMPTY allowlist → no `Access-Control-Allow-Origin` for any cross-origin caller
+ * (same-origin / no-Origin clients like curl and the operator pages are unaffected).
+ * Bearer-token auth (not cookies), so no `credentials` mode; the Authorization
+ * header is explicitly allowed. Mounted BEFORE `consumerAuth` so the unauthenticated
+ * OPTIONS preflight is answered by `cors()` and never 401'd.
+ */
+export function parseCorsOrigins(raw = process.env.CORS_ORIGINS): string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0)
+}
+
+export function corsMiddleware(origins = parseCorsOrigins()): MiddlewareHandler {
+  const allow = new Set(origins)
+  return cors({
+    origin: (origin) => (allow.has(origin) ? origin : null),
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Authorization', 'Content-Type'],
+    maxAge: 600,
+  })
+}
+
 export interface BuildAppOptions {
   /** Forwarded to consumerAuth — lets tests inject an offline Privy verifier. */
   auth?: AuthOptions
+  /** Override CORS allowed origins (tests). Defaults to the CORS_ORIGINS env. */
+  corsOrigins?: string[]
 }
 
 /**
@@ -104,7 +137,10 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
   mountDashboard(app)
   mountConsole(app)
 
-  // ── Tenant data plane (/v1) — dual-mode auth → c.set('consumer') ──────────────
+  // ── Tenant data plane (/v1) — browser CORS THEN dual-mode auth → c.set('consumer') ──
+  // CORS first: it answers the unauthenticated OPTIONS preflight and short-circuits
+  // before consumerAuth (which would 401 a header-less preflight).
+  app.use('/v1/*', corsMiddleware(opts.corsOrigins))
   app.use('/v1/*', consumerAuth(opts.auth))
 
   /**
