@@ -56,11 +56,20 @@ export function __resetTenantCache(clock?: () => number): void {
  * job (resolveTenant / tenants/me), so the worker's split-brain guard can also see
  * a now-disabled tenant and refuse it.
  */
-export async function getTenant(id: string, db: DbLike = defaultDb): Promise<TenantRow | undefined> {
+export async function getTenant(
+  id: string,
+  db: DbLike = defaultDb,
+  opts: { forceFresh?: boolean } = {},
+): Promise<TenantRow | undefined> {
   if (!id) return undefined
-  const hit = cache.get(id)
-  if (hit && hit.expiresAt > now()) return hit.row ?? undefined
-
+  if (!opts.forceFresh) {
+    const hit = cache.get(id)
+    if (hit && hit.expiresAt > now()) return hit.row ?? undefined
+  }
+  // forceFresh skips the positive cache for a read that gates IRREVERSIBLE side
+  // effects (the worker split-brain guard): a tenant disabled <TTL ago must be
+  // seen as disabled NOW, not served stale from the ~60s window. The fresh row
+  // still REFRESHES the cache so subsequent cached reads are consistent.
   const row = await db.query.engineTenants.findFirst({
     where: eq(schema.engineTenants.tenantId, id),
   })

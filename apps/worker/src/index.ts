@@ -119,9 +119,12 @@ async function handle(runId: string): Promise<void> {
 
   // ── Split-brain guard (T7) ─────────────────────────────────────────────────
   // A run row may outlive its tenant being disabled/deleted between enqueue and
-  // execution. Re-validate the tenant against the registry BEFORE any side effect,
-  // and load its secret_prefix for the provider factories. An unresolvable or
-  // non-active tenant fails the run closed — we never act on a stale tenant.
+  // execution. loadTenantSecrets re-validates the tenant against the registry with
+  // a FORCE-FRESH read (it bypasses the ~60s positive TTL cache) BEFORE any side
+  // effect, and loads its secret_prefix for the provider factories. A tenant
+  // disabled even moments ago is therefore seen as disabled here, not served stale.
+  // An unresolvable or non-active tenant fails the run closed — we never act on a
+  // stale tenant.
   const tenant = await loadTenantSecrets(run.consumerId)
   if (!tenant.exists || !tenant.active) {
     await markFailed(

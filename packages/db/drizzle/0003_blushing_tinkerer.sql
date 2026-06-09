@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "tenants_secret_prefix_unique" ON "engine_tenants" USING btree ("secret_prefix");

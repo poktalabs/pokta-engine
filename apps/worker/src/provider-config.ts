@@ -55,6 +55,16 @@ import { getTenant, isActive } from '../../engine-api/src/tenants'
  */
 const secretPrefixByConsumer = new Map<string, string>()
 
+/**
+ * The env-var prefix charset (mirrors seed-tenants.ts SECRET_PREFIX_RE + the
+ * schema column comment). The worker re-asserts it on READ before trusting a
+ * registry prefix to index `process.env`: even though the seed path validates
+ * this and the DB now enforces UNIQUE, an out-of-band INSERT/UPDATE could still
+ * write a malformed/foreign prefix. A bad prefix is REFUSED (no env read) rather
+ * than used to reach into another namespace's secrets.
+ */
+const SECRET_PREFIX_RE = /^[A-Z][A-Z0-9_]*$/
+
 /** Outcome of resolving a run's tenant from the registry (the split-brain guard). */
 export interface TenantSecretsResult {
   /** The tenant row exists in the registry. */
@@ -74,13 +84,23 @@ export interface TenantSecretsResult {
  * unresolvable/non-active tenant. NEVER throws — fail-soft is the caller's call.
  */
 export async function loadTenantSecrets(consumerId: string): Promise<TenantSecretsResult> {
-  const row = await getTenant(consumerId)
+  // forceFresh: this read GATES irreversible provider side effects, so it must NOT
+  // be served from the positive ~60s TTL cache. A tenant disabled <TTL before this
+  // run executes would otherwise still resolve 'active' and the side effect would
+  // proceed under a now-disabled tenant. Reading the live PK row here is the real
+  // split-brain guard (the previous cached read only re-validated a stale snapshot).
+  const row = await getTenant(consumerId, undefined, { forceFresh: true })
   if (!row) {
     secretPrefixByConsumer.delete(consumerId)
     return { exists: false, active: false, prefix: null }
   }
   const active = isActive(row)
-  const prefix = row.secretPrefix ?? null
+  const rawPrefix = row.secretPrefix ?? null
+  // Re-assert the charset on the value we are about to use to index process.env. A
+  // malformed/foreign prefix (only reachable via an out-of-band write) is treated
+  // as "no prefix" — the factory then throws and the workflow fail-softs, rather
+  // than the prefix being used to read another env namespace's secrets.
+  const prefix = rawPrefix && SECRET_PREFIX_RE.test(rawPrefix) ? rawPrefix : null
   if (active && prefix) secretPrefixByConsumer.set(consumerId, prefix)
   else secretPrefixByConsumer.delete(consumerId)
   return { exists: true, active, prefix }

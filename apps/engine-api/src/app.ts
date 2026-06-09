@@ -6,7 +6,7 @@ import { db } from '@godin-engine/db'
 import { gatedTargets as gatedTargetsOf, getWorkflow, listManifests } from '@godin-engine/workflows'
 import type { WorkflowManifest } from '@godin-engine/contract'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
-import { consumerAuth, type AuthOptions } from './auth'
+import { consumerAuth, type AuthOptions, type Consumer } from './auth'
 import { forConsumer, resolveTenant } from './scoped-db'
 import { allowedWorkflowsFor, toTenantView, type TenantRow } from './tenants'
 import { mountDemo } from './demo'
@@ -40,6 +40,25 @@ async function enqueue(runId: string): Promise<void> {
 
 function fail(c: Context, err: EngineError) {
   return c.json({ error: err.toEnvelope() }, err.httpStatus as ContentfulStatusCode)
+}
+
+/**
+ * Resolve the data-plane scope id for a /v1 request: the membership-resolved
+ * tenant id (NEVER the raw credential id). EVERY data-plane route (dispatch,
+ * runs, approvals) keys its `forConsumer` scope off THIS, so a Privy principal's
+ * reads and writes land on the tenant its `members[]` authorized — not on the
+ * legacy PRIVY_TENANT_MAP `consumer.id`, which is a decoupled config surface
+ * (`'' ` when unset). Returns `null` when the principal resolves to no active
+ * tenant (route → TENANT_UNKNOWN) so reads/writes can never hit an unowned
+ * (e.g. empty-string) scope. Fails closed for a privy principal whose non-empty
+ * `consumer.id` disagrees with the resolved tenant (confused-deputy guard).
+ */
+async function scopedTenantId(consumer: Consumer): Promise<string | null> {
+  const resolved = await resolveTenant(consumer)
+  if (!resolved.ok) return null
+  const tenantId = resolved.tenant.tenantId
+  if (consumer.mode === 'privy' && consumer.id && consumer.id !== tenantId) return null
+  return tenantId
 }
 
 /**
@@ -134,6 +153,19 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
     const consumer = c.get('consumer')
     const resolved = await resolveTenant(consumer)
     if (!resolved.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no known tenant'))
+    // The data-plane scope key is ALWAYS the membership-resolved tenant id, NEVER
+    // the raw credential id. For a service principal these are identical by
+    // construction (resolveTenant does getTenant(consumer.id)). For a Privy
+    // principal `consumer.id` comes from the legacy PRIVY_TENANT_MAP env, which is
+    // DECOUPLED from `members[]`; trusting it would let the allow-list gate (keyed
+    // off the resolved tenant) and the data write (keyed off the env map) target
+    // DIFFERENT tenants — a confused-deputy / split-brain hole. We close it by
+    // deriving the scope from `resolved` and, for privy, fail closed on any
+    // disagreement with a non-empty consumer.id.
+    const tenantId = resolved.tenant.tenantId
+    if (consumer.mode === 'privy' && consumer.id && consumer.id !== tenantId) {
+      return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no known tenant'))
+    }
 
     const id = c.req.param('id')
     const wf = getWorkflow(id)
@@ -151,7 +183,7 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
     }
 
     const body = (await c.req.json().catch(() => null)) as { consumer_id?: string; input?: unknown } | null
-    if (body?.consumer_id && body.consumer_id !== consumer.id) {
+    if (body?.consumer_id && body.consumer_id !== tenantId) {
       return fail(c, new EngineError('ARGS_INVALID', 'body.consumer_id does not match the authenticated tenant'))
     }
 
@@ -159,7 +191,7 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
     if (!parsed.success) return fail(c, new EngineError('ARGS_INVALID', parsed.error.message))
 
     const quota = wf.manifest.policy.find((p) => p.kind === 'quota')
-    const scoped = forConsumer(db, consumer.id)
+    const scoped = forConsumer(db, tenantId)
 
     let result: { runId: string; traceId: string }
     try {
@@ -178,21 +210,27 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
   })
 
   app.get('/v1/runs/:id', async (c) => {
-    const scoped = forConsumer(db, c.get('consumer').id)
+    const tenantId = await scopedTenantId(c.get('consumer'))
+    if (tenantId === null) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const scoped = forConsumer(db, tenantId)
     const row = await scoped.getRun(c.req.param('id'))
     if (!row) return fail(c, new EngineError('SKILL_NOT_FOUND', 'not found'))
     return c.json(row)
   })
 
   app.get('/v1/runs', async (c) => {
-    const scoped = forConsumer(db, c.get('consumer').id)
+    const tenantId = await scopedTenantId(c.get('consumer'))
+    if (tenantId === null) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const scoped = forConsumer(db, tenantId)
     const rows = await scoped.listRuns({ status: c.req.query('status') })
     return c.json({ runs: rows })
   })
 
   /** GET /v1/approvals?state=pending&approver=role:medic — this tenant's gate worklist (D-8). */
   app.get('/v1/approvals', async (c) => {
-    const scoped = forConsumer(db, c.get('consumer').id)
+    const tenantId = await scopedTenantId(c.get('consumer'))
+    if (tenantId === null) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const scoped = forConsumer(db, tenantId)
     const rows = await scoped.listApprovals({
       state: c.req.query('state'),
       approver: c.req.query('approver'),
@@ -204,7 +242,9 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
   app.post('/v1/approvals/:id/approve', async (c) => {
     const consumer = c.get('consumer')
     const id = c.req.param('id')
-    const scoped = forConsumer(db, consumer.id)
+    const tenantId = await scopedTenantId(consumer)
+    if (tenantId === null) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const scoped = forConsumer(db, tenantId)
 
     const approval = await scoped.getApproval(id)
     if (!approval) return fail(c, new EngineError('SKILL_NOT_FOUND', 'not found'))
@@ -236,7 +276,9 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
   app.post('/v1/approvals/:id/reject', async (c) => {
     const consumer = c.get('consumer')
     const id = c.req.param('id')
-    const scoped = forConsumer(db, consumer.id)
+    const tenantId = await scopedTenantId(consumer)
+    if (tenantId === null) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    const scoped = forConsumer(db, tenantId)
     const outcome = await scoped.reject({ approvalId: id, decidedBy: consumer.identity })
     if (!outcome.ok) {
       return c.json(

@@ -145,5 +145,14 @@ export const engineTenants = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('tenants_members_idx').on(t.members)],
+  (t) => [
+    index('tenants_members_idx').on(t.members),
+    // secret_prefix UNIQUE at the DB (plan §4 + the column comment). Uniqueness was
+    // previously enforced ONLY in validateSeeds() over the in-memory seed array; an
+    // out-of-band INSERT/UPDATE could create two ACTIVE tenants sharing a prefix and
+    // thus read each other's provider env (e.g. both 'MIPASE' → both read
+    // MIPASE_SHOPIFY_ACCESS_TOKEN). The DB constraint makes that un-writable.
+    // Postgres treats multiple NULLs as distinct, so the nullable column is fine.
+    uniqueIndex('tenants_secret_prefix_unique').on(t.secretPrefix),
+  ],
 )
