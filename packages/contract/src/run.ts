@@ -15,8 +15,8 @@ export type RunStatus = z.infer<typeof runStatusSchema>
  * The provider→client typing lives in `IntegrationClients`, which each provider
  * package augments via declaration merging (the registry seam in the worker).
  * Until a provider is registered its name resolves to `unknown`, so callers in
- * later phases get precise types as `packages/shopify` / `packages/mercadolibre`
- * land — without the contract importing those packages.
+ * later phases get precise types as the `@godin-engine/integrations` package's
+ * shopify / mercado-libre modules land — without the contract importing it.
  */
 export interface IntegrationClients {
   // Augmented by provider packages, e.g.:
