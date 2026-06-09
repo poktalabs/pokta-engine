@@ -45,6 +45,13 @@ export default defineWorkspace([
       environment: 'jsdom',
       globals: true,
       setupFiles: [fileURLToPath(new URL('./apps/web/src/test/setup.ts', import.meta.url))],
+      // Pin the mock-first split DETERMINISTICALLY. `apiFetch` reads
+      // `import.meta.env.VITE_USE_MOCKS` ONCE at module load (api.ts): non-live
+      // paths → resolveMock, LIVE_PATHS → the network stub. In local dev that var
+      // comes from the gitignored apps/web/.env.local, which CI does not have — so
+      // without this the web tests run in real-network mode in CI and every
+      // mocked-path assertion fails. Setting it here makes CI === local.
+      env: { VITE_USE_MOCKS: 'true' },
     },
   },
 ])
