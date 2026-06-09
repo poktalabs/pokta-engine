@@ -1,4 +1,3 @@
-import { useMemo, useState } from 'react'
 import { Workflow } from 'lucide-react'
 import type { ErrorEnvelope } from '@godin-engine/contract'
 import { useTenant } from '@/providers/TenantProvider'
@@ -7,63 +6,47 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { WorkflowRow } from '@/components/workflows/WorkflowRow'
-import { MOCK_WORKFLOWS, type WorkflowListItem } from '@/mocks/workflows'
+import { useWorkspaceWorkflows } from './use-workflows'
 
 /**
- * WORKFLOWS list surface (M2 P3-A).
+ * WORKFLOWS list surface (P5b-wired).
  *
- * Lists the active tenant's workflows as hairline-grid rows (trigger, last-run
- * pill, pending count) via <WorkflowRow>. Covers the full state matrix
- * (loading / empty / error+403 / loaded) on mock data behind `VITE_USE_MOCKS`.
- * P5b swaps `useWorkflowsList()` for the `use-workflows` TanStack hook.
- *
- * `?mock=` query toggles the demo state (`loading` / `empty` / `error` /
- * `forbidden`) so every branch is reachable without a backend.
+ * Lists the active tenant's workflow CARDS (trigger, last-run pill, pending count)
+ * via <WorkflowRow>, driven by the LIVE `useWorkspaceWorkflows()` hook
+ * (GET /v1/workspace/workflows). Covers the full state matrix
+ * (loading / empty / error+403 / loaded). Graceful degradation (D3): any endpoint
+ * error renders ErrorState (code-aware copy via ApiError.envelope), never a white
+ * screen; an empty roster renders the honest EmptyState.
  */
-
-type ListState =
-  | { status: 'loading' }
-  | { status: 'empty' }
-  | { status: 'error'; error: ErrorEnvelope }
-  | { status: 'loaded'; workflows: WorkflowListItem[] }
-
-const FORBIDDEN: ErrorEnvelope = {
-  code: 'APPROVAL_DENIED',
-  message: 'You don’t have access to this workspace’s workflows.',
-  retryable: false,
-}
-
-const GENERIC: ErrorEnvelope = {
-  code: 'SKILL_EXEC_ERROR',
-  message: 'We couldn’t load your workflows.',
-  retryable: true,
-}
-
-/** Resolve the list state from mock data + a demo `?mock=` override. */
-function useWorkflowsList(): ListState {
-  const demo = new URLSearchParams(window.location.search).get('mock')
-  return useMemo<ListState>(() => {
-    switch (demo) {
-      case 'loading':
-        return { status: 'loading' }
-      case 'empty':
-        return { status: 'empty' }
-      case 'error':
-        return { status: 'error', error: GENERIC }
-      case 'forbidden':
-        return { status: 'error', error: FORBIDDEN }
-      default:
-        return { status: 'loaded', workflows: MOCK_WORKFLOWS }
-    }
-  }, [demo])
-}
 
 export default function WorkflowsList() {
   const tenant = useTenant()
-  const initial = useWorkflowsList()
-  // Local copy so a Retry can flip an error back to loaded in the mock demo.
-  const [state, setState] = useState<ListState>(initial)
+  const { data, isPending, isError, error, refetch } = useWorkspaceWorkflows()
   const basePath = `/${tenant.id}/workflows`
+
+  let body: React.ReactNode
+  if (isPending) {
+    body = <LoadingState label="Loading workflows…" />
+  } else if (isError) {
+    const envelope: ErrorEnvelope | undefined = error?.envelope
+    body = <ErrorState error={envelope} onRetry={() => void refetch()} />
+  } else if (data.workflows.length === 0) {
+    body = (
+      <EmptyState
+        Icon={Workflow}
+        title="No workflows yet"
+        description="When workflows are configured for your workspace they’ll appear here."
+      />
+    )
+  } else {
+    body = (
+      <HairlineGrid cols={1}>
+        {data.workflows.map((workflow) => (
+          <WorkflowRow key={workflow.id} workflow={workflow} basePath={basePath} />
+        ))}
+      </HairlineGrid>
+    )
+  }
 
   return (
     <section className="space-y-6">
@@ -76,30 +59,7 @@ export default function WorkflowsList() {
         </p>
       </header>
 
-      {state.status === 'loading' && <LoadingState label="Loading workflows…" />}
-
-      {state.status === 'empty' && (
-        <EmptyState
-          Icon={Workflow}
-          title="No workflows yet"
-          description="When workflows are configured for your workspace they’ll appear here."
-        />
-      )}
-
-      {state.status === 'error' && (
-        <ErrorState
-          error={state.error}
-          onRetry={() => setState({ status: 'loaded', workflows: MOCK_WORKFLOWS })}
-        />
-      )}
-
-      {state.status === 'loaded' && (
-        <HairlineGrid cols={1}>
-          {state.workflows.map((workflow) => (
-            <WorkflowRow key={workflow.id} workflow={workflow} basePath={basePath} />
-          ))}
-        </HairlineGrid>
-      )}
+      {body}
     </section>
   )
 }

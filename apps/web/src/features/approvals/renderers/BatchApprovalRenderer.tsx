@@ -18,12 +18,24 @@ import type {
   ApprovalRendererProps,
   DecisionRequest,
 } from '../types'
-import {
-  BATCH_APPLY_TARGET,
-  MARGIN_FLOOR,
-  type BatchPricingArtifact,
-  type BatchPricingRow,
-} from '@/mocks/approvals.batch'
+import type { BatchPricingArtifact, BatchPricingRow } from '@/mocks/approvals.batch'
+
+/**
+ * Presentation constants for the Mi Pase daily-pricing batch (P5b-wired).
+ *
+ * These were previously pulled as VALUES from the mock fixture; they are domain
+ * display constants (the gross-margin floor the agent enforces, and the apply
+ * target shown in the confirm dialog), NOT mock data. Defined locally so this
+ * render surface carries no mock VALUE import (only the row/artifact TYPES, which
+ * are erased at build). The real decision is keyed off the server-stored approval
+ * artifact; this `target` only labels the confirm copy + reassembled payload.
+ */
+const MARGIN_FLOOR = 0.15
+const BATCH_APPLY_TARGET: BatchPricingArtifact['target'] = {
+  channel: 'shopify',
+  store: 'mi-pase-test',
+  testStore: true,
+}
 
 /**
  * Mi Pase BATCH approval renderer (M2 P2-B — the hero).

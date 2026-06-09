@@ -1,22 +1,24 @@
+import type { TenantView } from '@godin-engine/contract'
 import { HairlineGrid, HairlineCell } from '@/components/ui/HairlineGrid'
-import type { TenantProfile } from '@/mocks/settings'
 
 /**
- * Tenant profile — READ-ONLY (M2 P4-C). A hairline-grid of profile facts. No
- * editable field here: workspace-profile editing is descoped for M2.
+ * Tenant profile — READ-ONLY (P5b-wired). A hairline-grid of profile facts built
+ * from the LIVE `TenantView` (the already-live TenantProvider; no new endpoint, no
+ * PATCH). No editable field here: workspace-profile editing is out of scope.
+ *
+ * Only fields the server actually returns are shown — id, name, status, currency,
+ * locale, and the optional branding badge. Nothing is fabricated.
  */
 
-const LOCALE_LABEL: Record<TenantProfile['locale'], string> = {
+const LOCALE_LABEL: Record<string, string> = {
   en: 'English',
   'es-MX': 'Español (México)',
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+const STATUS_LABEL: Record<TenantView['status'], string> = {
+  active: 'Active',
+  pending: 'Pending',
+  disabled: 'Disabled',
 }
 
 interface Field {
@@ -25,17 +27,16 @@ interface Field {
 }
 
 export interface TenantProfilePanelProps {
-  profile: TenantProfile
+  view: TenantView
 }
 
-export function TenantProfilePanel({ profile }: TenantProfilePanelProps) {
+export function TenantProfilePanel({ view }: TenantProfilePanelProps) {
   const fields: Field[] = [
-    { label: 'Workspace', value: profile.name },
-    { label: 'Plan', value: profile.plan },
-    { label: 'Currency', value: profile.currency },
-    { label: 'Default language', value: LOCALE_LABEL[profile.locale] },
-    { label: 'Created', value: formatDate(profile.createdAt) },
-    { label: 'Tenant id', value: profile.tenantId },
+    { label: 'Workspace', value: view.name },
+    { label: 'Status', value: STATUS_LABEL[view.status] },
+    { label: 'Currency', value: view.currency },
+    { label: 'Default language', value: LOCALE_LABEL[view.locale] ?? view.locale },
+    { label: 'Tenant id', value: view.id },
   ]
 
   return (
@@ -47,9 +48,9 @@ export function TenantProfilePanel({ profile }: TenantProfilePanelProps) {
         >
           Tenant profile
         </h2>
-        {profile.badge && (
+        {view.branding.badge && (
           <span className="border border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_16%,var(--color-paper))] px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-[var(--foreground)]">
-            {profile.badge}
+            {view.branding.badge}
           </span>
         )}
       </div>

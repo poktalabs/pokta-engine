@@ -54,18 +54,52 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
 /**
- * LIVE PATHS (W3) — the auth/tenant-identity surfaces that ALWAYS hit the network,
- * even when `VITE_USE_MOCKS==='true'`. PR2b wires ONLY `/v1/tenants/me` live; every
- * other surface (approvals/runs/workflows/integrations/reports) stays mocked. Match
- * is on the pathname (query stripped). Keep this set MINIMAL — widening it pulls a
- * surface off the registry and onto the real backend.
+ * LIVE PATHS (W3 + P5b Wave 2) — the surfaces that ALWAYS hit the network, even
+ * when `VITE_USE_MOCKS==='true'`. PR2b wired ONLY `/v1/tenants/me` live; P5b Wave 2
+ * wires the workspace READ MODELS onto the merged Wave-1 backend, so each surface
+ * the SPA now reads from the real `/v1` endpoints is added here. Match is on the
+ * pathname (query stripped). A surface NOT in this matcher is served from the
+ * in-process mock registry (`resolveMock`); a surface IN it bypasses the registry
+ * and goes to `fetch`. So this matcher is what makes the wired pages hit the real
+ * backend (and what makes their jsdom live-path tests, which stub `global.fetch`,
+ * exercise the real path instead of the registry).
+ *
+ * REPORTS is deliberately ABSENT — Reports is a deferred surface (ComingSoon /
+ * EmptyState) with NO network call, so it must neither be live NOR hit the mock
+ * registry; it simply renders an honest empty state.
+ *
+ * Exact paths (whole-pathname equality):
+ *   - /v1/tenants/me          — tenant identity (W3, unchanged).
+ *   - /v1/workspace/workflows — the workspace workflow CARDS read model.
+ *   - /v1/integrations        — this tenant's integration CONNECTION status rows.
+ *   - /v1/runs                — the tenant run list (parent of the run detail).
+ *   - /v1/approvals           — the tenant approvals worklist.
+ *
+ * Pattern paths (parameterized — a static Set cannot match `/v1/runs/:id`):
+ *   - ^/v1/workflows/[^/]+/runs$            — a workflow family's runs.
+ *   - ^/v1/runs/[^/]+$                      — a single run detail.
+ *   - ^/v1/approvals/[^/]+/(approve|reject)$ — the approve/reject mutations.
  */
-const LIVE_PATHS: ReadonlySet<string> = new Set(['/v1/tenants/me'])
+const LIVE_PATHS: ReadonlySet<string> = new Set([
+  '/v1/tenants/me',
+  '/v1/workspace/workflows',
+  '/v1/integrations',
+  '/v1/runs',
+  '/v1/approvals',
+])
+
+/** Parameterized live paths a static Set cannot match (matched against the pathname). */
+const LIVE_PATH_PATTERNS: readonly RegExp[] = [
+  /^\/v1\/workflows\/[^/]+\/runs$/,
+  /^\/v1\/runs\/[^/]+$/,
+  /^\/v1\/approvals\/[^/]+\/(approve|reject)$/,
+]
 
 /** True when `path` (query stripped) is a live network path even under mocks. */
 function isLivePath(path: string): boolean {
   const pathname = path.split('?')[0] ?? path
-  return LIVE_PATHS.has(pathname)
+  if (LIVE_PATHS.has(pathname)) return true
+  return LIVE_PATH_PATTERNS.some((re) => re.test(pathname))
 }
 
 /**

@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import type { ErrorEnvelope, RunDetail as RunDetailRow } from '@godin-engine/contract'
 import { useTenant } from '@/providers/TenantProvider'
 import { RunDetailHeader } from '@/components/runs/RunDetailHeader'
 import { RunStatTiles } from '@/components/runs/RunStatTiles'
@@ -7,76 +7,87 @@ import { ReviewCallout } from '@/components/runs/ReviewCallout'
 import { AutoAppliedCollapse } from '@/components/runs/AutoAppliedCollapse'
 import { NoChangeLine } from '@/components/runs/NoChangeLine'
 import { PartialFailureBanner } from '@/components/runs/PartialFailureBanner'
+import { LoadingState } from '@/components/ui/LoadingState'
 import { EmptyState } from '@/components/ui/EmptyState'
-import {
-  MOCK_RUN_DETAIL,
-  MOCK_RUN_DETAIL_PARTIAL_FAILURE,
-  PARTIAL_FAILURE_FAILED_ROW_IDS,
-  getPricingOutput,
-} from '@/mocks/runs'
+import { ErrorState } from '@/components/ui/ErrorState'
+import type { PricingRunOutput } from '@/mocks/runs'
+import { useRerunWorkflow, useRunDetail } from './use-run-detail'
 
 /**
- * RUN DETAIL surface (M2 P3-B).
+ * RUN DETAIL surface (P5b-wired).
  *
- * Answers "what did the run do, and what still needs me?" for the Mi Pase
- * daily-pricing run. Composition:
- *   breadcrumb → serif title + HELD-AT-GATE pill + Re-run
- *   → 4 stat tiles (analyzed / auto-applied / needs-review / no-change)
- *   → amber "N prices need review" callout (real flag-reason copy)
- *   → collapsed confident set ("248 applied automatically · View all")
- *   → no-change line
+ * Wires the run-detail summary to the LIVE read model (GET /v1/runs/:id) via
+ * `useRunDetail`, and Re-run to the real dispatch (POST /v1/workflows/:id/runs)
+ * via `useRerunWorkflow`. The run `output` is opaque per-workflow JSON; this page
+ * narrows it to the daily-pricing `PricingRunOutput` shape (the renderer-owned
+ * shape, imported as a TYPE only). When a run carries that shape it renders the
+ * rich tiles + review callout + applied/no-change breakdown; otherwise it renders
+ * a clean run summary (header + empty-summary), never a crash.
  *
- * STATES (P3-B DoD slice; full loading/empty/error/403 matrix lands with P5b
- * wiring): three are demoable here via `?state=`:
- *   - default                → held-at-gate summary, confident set collapsed
- *   - auto-applied-expanded   → confident set pre-expanded into its table
- *   - partial-failure         → failed run + partial-failure banner + Retry
- *
- * Mock-data-first behind the run fixtures; no network. `?state=` selects the
- * fixture so all states are reachable on `/:tenant/runs/:id` without route edits.
+ * Graceful degradation (D3): loading / not-found (404) / error all render cleanly.
  */
-export type RunDetailState = 'default' | 'auto-applied-expanded' | 'partial-failure'
-
-const STATES: ReadonlySet<string> = new Set<RunDetailState>([
-  'default',
-  'auto-applied-expanded',
-  'partial-failure',
-])
 
 const WORKFLOW_NAME = 'Daily Pricing'
 
-export interface RunDetailProps {
-  /** Fallback state when no `?state=` query is present (used in tests / demos). */
-  defaultState?: RunDetailState
+/** Narrow the opaque run `output` to the daily-pricing shape, defensively. */
+function asPricingOutput(run: RunDetailRow): PricingRunOutput | null {
+  const out = run.output
+  if (
+    out &&
+    typeof out === 'object' &&
+    (out as { kind?: unknown }).kind === 'mipase.daily-pricing'
+  ) {
+    return out as PricingRunOutput
+  }
+  return null
 }
 
-export default function RunDetail({ defaultState = 'default' }: RunDetailProps) {
+export default function RunDetail() {
   const tenant = useTenant()
   const navigate = useNavigate()
   const params = useParams()
-  const [search] = useSearchParams()
+  const runId = params.id
 
-  const state: RunDetailState = useMemo(() => {
-    const q = search.get('state')
-    return (q && STATES.has(q) ? q : defaultState) as RunDetailState
-  }, [search, defaultState])
-
-  const isFailure = state === 'partial-failure'
-  const run = isFailure ? MOCK_RUN_DETAIL_PARTIAL_FAILURE : MOCK_RUN_DETAIL
-  const output = getPricingOutput(run)
+  const { data: run, isPending, isError, error, refetch } = useRunDetail(runId)
+  const rerun = useRerunWorkflow()
   const basePath = `/${tenant.id}`
 
-  function goReview() {
-    navigate(`${basePath}/approvals`)
-  }
-  function rerun() {
-    // Mock-data-first: a real re-run dispatches a child run in P5b. Here we just
-    // route back to the workflow so the affordance is live, not dead.
-    navigate(`${basePath}/workflows/${run.workflowId}`)
+  if (isPending) {
+    return (
+      <section className="space-y-6">
+        <LoadingState label="Loading run…" />
+      </section>
+    )
   }
 
-  // Defensive: a non-pricing run (or missing output) renders an empty fallback
-  // rather than crashing — keeps the surface robust as more workflows land.
+  if (isError) {
+    const envelope: ErrorEnvelope | undefined = error?.envelope
+    // A 404 reads as "not found" via the shared ErrorState code-aware copy; any
+    // other error renders its envelope. Never a white screen.
+    return (
+      <section className="space-y-6">
+        <ErrorState error={envelope} onRetry={() => void refetch()} />
+      </section>
+    )
+  }
+
+  // `run` is defined past the isPending/isError guards above.
+  const resolvedRun = run
+  const doRerun = () => {
+    rerun.mutate(
+      { workflowId: resolvedRun.workflowId },
+      {
+        // Routing to the workflow keeps the affordance live even when a child run
+        // id isn't surfaced; the workflow page shows the fresh run.
+        onSuccess: () => navigate(`${basePath}/workflows/${resolvedRun.workflowId}`),
+      },
+    )
+  }
+
+  const output = asPricingOutput(resolvedRun)
+
+  // A non-pricing run (or missing output) renders a clean summary rather than
+  // crashing — keeps the surface robust as more workflows land.
   if (!output) {
     return (
       <section className="space-y-6">
@@ -85,8 +96,11 @@ export default function RunDetail({ defaultState = 'default' }: RunDetailProps) 
           workflowName={WORKFLOW_NAME}
           heldAtGate={false}
           basePath={basePath}
-          onRerun={rerun}
+          onRerun={doRerun}
         />
+        {rerun.isError && (
+          <ErrorState error={rerun.error?.envelope} onRetry={doRerun} />
+        )}
         <EmptyState
           title="No run summary yet"
           description="This run hasn’t produced a summary the dashboard can display."
@@ -95,10 +109,8 @@ export default function RunDetail({ defaultState = 'default' }: RunDetailProps) 
     )
   }
 
+  const isFailure = run.status === 'failed'
   const heldAtGate = !isFailure && output.needsReviewCount > 0
-  const failedItems = output.flagged.filter((f) =>
-    PARTIAL_FAILURE_FAILED_ROW_IDS.includes(f.rowId),
-  )
 
   return (
     <section className="space-y-8">
@@ -107,8 +119,10 @@ export default function RunDetail({ defaultState = 'default' }: RunDetailProps) 
         workflowName={WORKFLOW_NAME}
         heldAtGate={heldAtGate}
         basePath={basePath}
-        onRerun={rerun}
+        onRerun={doRerun}
       />
+
+      {rerun.isError && <ErrorState error={rerun.error?.envelope} onRetry={doRerun} />}
 
       <RunStatTiles output={output} />
 
@@ -121,22 +135,18 @@ export default function RunDetail({ defaultState = 'default' }: RunDetailProps) 
               retryable: true,
             }
           }
-          failedItems={failedItems.length > 0 ? failedItems : output.flagged}
-          onRetry={rerun}
+          failedItems={output.flagged}
+          onRetry={doRerun}
         />
       ) : (
         <ReviewCallout
           count={output.needsReviewCount}
           items={output.flagged}
-          onReview={goReview}
+          onReview={() => navigate(`${basePath}/approvals`)}
         />
       )}
 
-      <AutoAppliedCollapse
-        count={output.autoAppliedCount}
-        items={output.applied}
-        defaultExpanded={state === 'auto-applied-expanded'}
-      />
+      <AutoAppliedCollapse count={output.autoAppliedCount} items={output.applied} />
 
       <NoChangeLine count={output.noChangeCount} />
     </section>

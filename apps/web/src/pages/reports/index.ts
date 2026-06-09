@@ -1,12 +1,8 @@
 /**
- * Reports surface barrel (M2 P4-B).
+ * Reports surface barrel.
  *
- * The route tree (P1-B owns App.tsx) lazy-imports these defaults to swap the
- * Reports placeholder for the real index + detail surfaces:
- *
- *   const Reports = lazy(() => import('@/pages/reports/ReportsPage'))
- *   const ReportDetail = lazy(() => import('@/pages/reports/ReportDetailPage'))
+ * Reports is a DEFERRED surface (P5b Wave 2): the routes stay mounted but render a
+ * ComingSoon panel with NO network call. The page lazy-imports use these defaults.
  */
 export { default as ReportsPage } from './ReportsPage'
 export { default as ReportDetailPage } from './ReportDetailPage'
-export { useReports, useReport } from './use-reports'

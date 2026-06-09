@@ -1,102 +1,45 @@
-import { Pill, type PillStatus } from '@/components/ui/pill'
-import { RiskBadge } from '@/pages/settings/RiskBadge'
-import type {
-  IntegrationConnectionStatus,
-  IntegrationStatusSummary,
-} from '@/mocks/settings'
+import { Link } from 'react-router-dom'
+import { Plug } from 'lucide-react'
+import { ComingSoon } from '@/components/ui/ComingSoon'
 
 /**
- * Integration-status summary — READ-ONLY (M2 P4-C). A hairline-grid table of the
- * tenant's connectors with status + risk-tier. NO credential editing: this is a
- * status display only. Each connector maps its `connected | estimated |
- * not-yet-live` status to a brand status pill (icon + label, never color alone)
- * and shows the resolved 3-tier risk badge.
+ * Integration-status summary panel — DEFERRED (P5b Wave 2).
+ *
+ * The honest per-tenant integration enablement status lives on its own surface
+ * (the Integrations page → GET /v1/integrations). This Settings panel keeps its
+ * SHELL but no longer fabricates a rows table — it points to the live surface
+ * instead of duplicating it with mock data.
  */
-
-interface StatusMeta {
-  pill: PillStatus
-  label: string
-  iconLabel: string
-}
-
-const STATUS_META: Record<IntegrationConnectionStatus, StatusMeta> = {
-  connected: { pill: 'ok', label: 'Connected', iconLabel: 'Connected' },
-  estimated: { pill: 'warn', label: 'Estimated', iconLabel: 'Estimated (illustrative)' },
-  'not-yet-live': { pill: 'idle', label: 'Not yet live', iconLabel: 'Not yet live' },
-}
-
 export interface IntegrationStatusPanelProps {
-  integrations: IntegrationStatusSummary[]
+  /** Base path for the workspace, e.g. `/mi-pase`, so the link is tenant-scoped. */
+  basePath: string
 }
 
-export function IntegrationStatusPanel({ integrations }: IntegrationStatusPanelProps) {
+export function IntegrationStatusPanel({ basePath }: IntegrationStatusPanelProps) {
   return (
     <section aria-labelledby="settings-integrations-heading" className="space-y-4">
-      <div className="space-y-1">
-        <h2
-          id="settings-integrations-heading"
-          className="font-serif text-xl leading-tight text-[var(--foreground)]"
-        >
-          Integration status
-        </h2>
-        <p className="text-sm text-[var(--foreground-soft)]">
-          Connector status is read-only and illustrative for M2 — credential
-          management is not available yet.
-        </p>
-      </div>
-
-      <div
-        role="table"
-        aria-label="Integration status"
-        className="border border-[var(--rule)] bg-[var(--surface)]"
+      <h2
+        id="settings-integrations-heading"
+        className="font-serif text-xl leading-tight text-[var(--foreground)]"
       >
-        <div
-          role="row"
-          className="grid grid-cols-[1.4fr_1fr_0.8fr] gap-4 border-b border-[var(--rule)] px-5 py-3"
-        >
-          <span role="columnheader" className="kicker text-[var(--foreground-soft)]">
-            Connector
-          </span>
-          <span role="columnheader" className="kicker text-[var(--foreground-soft)]">
-            Status
-          </span>
-          <span role="columnheader" className="kicker text-[var(--foreground-soft)]">
-            Risk
-          </span>
-        </div>
-
-        <div className="divide-y divide-[var(--border)]">
-          {integrations.map((integration) => {
-            const meta = STATUS_META[integration.status]
-            return (
-              <div
-                key={integration.provider}
-                role="row"
-                className="grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-4 px-5 py-4"
-              >
-                <span role="cell" className="flex flex-col gap-0.5">
-                  <span className="font-sans text-sm font-semibold text-[var(--foreground)]">
-                    {integration.label}
-                  </span>
-                  {integration.detail && (
-                    <span className="text-xs leading-snug text-[var(--foreground-soft)]">
-                      {integration.detail}
-                    </span>
-                  )}
-                </span>
-                <span role="cell">
-                  <Pill status={meta.pill} iconLabel={meta.iconLabel} showTick>
-                    {meta.label}
-                  </Pill>
-                </span>
-                <span role="cell">
-                  <RiskBadge tier={integration.riskTier} />
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+        Integration status
+      </h2>
+      <ComingSoon
+        Icon={Plug}
+        title="Manage integrations on the Integrations page"
+        description={
+          <>
+            Connector enablement status now lives on its own surface.{' '}
+            <Link
+              to={`${basePath}/integrations`}
+              className="underline underline-offset-2 hover:text-[var(--foreground)]"
+            >
+              Open Integrations
+            </Link>
+            .
+          </>
+        }
+      />
     </section>
   )
 }

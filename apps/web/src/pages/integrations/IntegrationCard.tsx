@@ -1,31 +1,33 @@
-import { Plug, ArrowDownToLine } from 'lucide-react'
+import { Plug } from 'lucide-react'
+import type {
+  IntegrationConnectionStatus,
+  IntegrationStatus,
+} from '@godin-engine/contract'
 import { Pill, type PillStatus } from '@/components/ui/pill'
 import { cn } from '@/lib/utils'
-import type { IntegrationStatus, IntegrationConnectionStatus } from '@/mocks/integrations'
-import { RiskBadge } from './RiskBadge'
 
 /**
- * Integration status card (M2 P4-A).
+ * Integration status card (P5b-wired).
  *
- * A freestanding pop-card — own `1.5px ink` border + `4px 4px 0 0 ink` stamp that
- * lifts on hover (the brand's choice-card affordance; integrations ARE choices, so
- * the hairline grid is not the right system here). Carries:
- *   - connector name + a sharp square instrument badge (brand cue)
- *   - a status pill (connection status) — icon + label, never color alone
- *   - a 3-tier risk badge (risk-tiers.css)
- *   - a small report/data slot (the compact figure the card surfaces)
+ * Renders the LIVE, honest `IntegrationStatus` read model: only
+ * `{ id, displayName, category, status, detail? }`. Status is the ops-asserted
+ * per-tenant ENABLEMENT state (`enabled | pending | disabled`) — rendered as
+ * "Enabled / Pending / Disabled", NEVER "Connected / Live". The old
+ * risk-tier / report-slot / read-only-feed / provider fields and the
+ * estimated/not-yet-live vocabulary are gone (the backend does not assert them).
  *
- * Radius 0, hairline rules, no gradients — all from the design system.
+ * Brand: freestanding pop-card (1.5px ink border + hard-offset stamp), radius 0,
+ * status pill is icon + label (never color alone).
  */
 
-/** Map connection status → the shared status-pill role + label/icon copy. */
+/** Map the per-tenant connection status → the shared status-pill role + copy. */
 const STATUS_PILL: Record<
   IntegrationConnectionStatus,
   { status: PillStatus; label: string; iconLabel: string }
 > = {
-  connected: { status: 'ok', label: 'Connected', iconLabel: 'Status: connected' },
-  estimated: { status: 'warn', label: 'Estimated', iconLabel: 'Status: estimated' },
-  'not-yet-live': { status: 'idle', label: 'Not yet live', iconLabel: 'Status: not yet live' },
+  enabled: { status: 'ok', label: 'Enabled', iconLabel: 'Status: enabled' },
+  pending: { status: 'warn', label: 'Pending', iconLabel: 'Status: pending' },
+  disabled: { status: 'idle', label: 'Disabled', iconLabel: 'Status: disabled' },
 }
 
 export interface IntegrationCardProps {
@@ -35,7 +37,7 @@ export interface IntegrationCardProps {
 
 export function IntegrationCard({ integration, className }: IntegrationCardProps) {
   const pill = STATUS_PILL[integration.status]
-  const headingId = `integration-${integration.provider}`
+  const headingId = `integration-${integration.id}`
 
   return (
     <article
@@ -60,43 +62,24 @@ export function IntegrationCard({ integration, className }: IntegrationCardProps
             id={headingId}
             className="font-serif text-lg leading-tight text-[var(--foreground)]"
           >
-            {integration.name}
+            {integration.displayName}
           </h3>
         </div>
-        {integration.readOnly && (
-          <span
-            className="inline-flex items-center gap-1 text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]"
-            title="Read-only feed — this connector only reads, never writes back."
-          >
-            <ArrowDownToLine className="size-3" aria-hidden="true" />
-            Feed
-          </span>
-        )}
+        <span className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+          {integration.category}
+        </span>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
         <Pill status={pill.status} iconLabel={pill.iconLabel} showTick>
           {pill.label}
         </Pill>
-        <RiskBadge tier={integration.riskTier} />
       </div>
 
       {integration.detail && (
         <p className="text-sm leading-relaxed text-[var(--foreground-soft)]">
           {integration.detail}
         </p>
-      )}
-
-      {integration.report && (
-        // The small report/data slot — a compact figure, hairline-separated.
-        <dl className="mt-auto flex items-baseline justify-between border-t border-[var(--border)] pt-3">
-          <dt className="text-xs uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
-            {integration.report.label}
-          </dt>
-          <dd className="font-serif text-xl leading-none text-[var(--foreground)]">
-            {integration.report.value}
-          </dd>
-        </dl>
       )}
     </article>
   )
