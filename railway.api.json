@@ -1,7 +1,18 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "watchPatterns": [
+      "apps/engine-api/**",
+      "packages/**",
+      "integrations/**",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "package.json",
+      "turbo.json",
+      "tsconfig.base.json",
+      "railway.api.json"
+    ]
   },
   "deploy": {
     "preDeployCommand": "pnpm --filter @godin-engine/db db:migrate",
