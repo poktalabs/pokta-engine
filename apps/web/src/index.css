@@ -23,15 +23,13 @@
 @import "./styles/light-form-fields.css";
 @import "./styles/risk-tiers.css";
 
-/* ─── Theme mapping: expose the brand font tokens to Tailwind utilities ──────
-   `inline` so `font-serif`/`font-sans`/`font-funnel` resolve against the CSS
-   custom properties declared in tokens.css (Fontsource provides the actual
-   variable font families above). */
+/* ─── Theme mapping ──────────────────────────────────────────────────────────
+   The brand font tokens (--font-serif/--font-sans/--font-funnel) are declared
+   in tokens.css's @theme block — do NOT re-map them here as
+   `--font-serif: var(--font-serif)`: a later @theme block overrides the
+   earlier literal values, emitting a self-referencing (invalid) variable that
+   silently drops the whole app to browser default fonts. */
 @theme inline {
-  --font-serif: var(--font-serif);
-  --font-sans: var(--font-sans);
-  --font-funnel: var(--font-funnel);
-
   /* Brand shape DNA: radius 0 everywhere. Map every Tailwind radius step to 0 so
      `rounded`, `rounded-md`, `rounded-full`, etc. all stay SHARP. */
   --radius-xs: 0;
