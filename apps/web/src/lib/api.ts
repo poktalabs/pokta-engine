@@ -88,6 +88,13 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
  * (logged out / pre-mount). `null` means no `Authorization` header is attached. We
  * deliberately have NO `X-Service-Key` path: the machine secret never reaches the
  * browser.
+ *
+ * A getter THROW (transient Privy error — network blip mid-refresh, JWKS hiccup,
+ * SDK race on a backgrounded tab) is swallowed to `null` HERE so the initial
+ * request just goes out header-less (the server answers 401, which routes into the
+ * single-shot re-auth path). The re-auth path itself uses `refreshAuthToken`, which
+ * RETRIES with backoff and does NOT treat a single transient throw as a terminal
+ * null → so a momentary token-fetch failure no longer escalates straight to logout.
  */
 async function getAuthToken(): Promise<string | null> {
   if (!authTokenGetter) return null
@@ -112,23 +119,73 @@ export function setLogoutHandler(handler: LogoutHandler | null): void {
   logoutHandler = handler
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 /**
- * Single-flight token refresh (W5). Concurrent 401s share ONE refresh so we never
- * fan out N parallel Privy refreshes (and never stack N retries). `getAccessToken`
- * transparently refreshes an expired token inside Privy; we just call it once and
- * de-dupe via the in-flight promise. Returns the fresh token (or null).
+ * Token-refresh backoff schedule (W5, hardened). Privy's `getAccessToken` is NOT a
+ * forced refresh — it only mints a NEW token when the current one is expired/near-
+ * expiry by Privy's OWN clock. For a server-side 401 where the token is not yet
+ * Privy-expired (SPA↔engine clock skew, near-boundary expiry, a transient getter
+ * throw), the first call can return the SAME token or throw. Privy's documented
+ * remedy ("Managing expired access tokens") is to call `getAccessToken` with a
+ * TIME-BASED BACKOFF until a refreshed token is returned, and only log out if it
+ * still cannot be refreshed. These delays implement that bounded backoff. The first
+ * attempt is immediate (0ms) so the common case (token already refreshed) costs
+ * nothing; the extra attempts cover the skew/transient window.
+ */
+const REFRESH_BACKOFF_MS: readonly number[] = [0, 250, 750]
+
+/**
+ * Single-flight token refresh (W5, hardened). Concurrent 401s share ONE refresh so
+ * we never fan out N parallel Privy refreshes (and never stack N retries).
+ *
+ * Per Privy guidance, this retries `getAccessToken` with a short time-based backoff:
+ *  - a getter THROW (transient) is retried rather than collapsing to an immediate
+ *    null → logout (closes the "momentary token-fetch failure ejects the session"
+ *    gap);
+ *  - a token that DIFFERS from the one the failed request used means Privy minted a
+ *    fresh token → return it immediately (no pointless extra waiting);
+ *  - if every attempt yields the SAME (still-not-refreshed) token or null, we return
+ *    that final value so the caller logs out — the bounded, intentional outcome.
+ *
+ * `previousToken` is the bearer the 401'd request carried; passing it lets us detect
+ * "Privy refreshed to a new token" vs "Privy handed back the identical token".
  */
 let refreshInFlight: Promise<string | null> | null = null
-function refreshAuthToken(): Promise<string | null> {
+function refreshAuthToken(previousToken: string | null): Promise<string | null> {
   if (!refreshInFlight) {
-    refreshInFlight = getAuthToken().finally(() => {
+    refreshInFlight = (async () => {
+      let latest: string | null = null
+      for (let i = 0; i < REFRESH_BACKOFF_MS.length; i++) {
+        if (REFRESH_BACKOFF_MS[i]) await sleep(REFRESH_BACKOFF_MS[i]!)
+        let token: string | null
+        let threw = false
+        try {
+          token = authTokenGetter ? await authTokenGetter() : null
+        } catch {
+          // Transient getter error — keep backing off rather than logging out now.
+          token = null
+          threw = true
+        }
+        if (token) {
+          latest = token
+          // A genuinely refreshed (different) token → done. If it matches the token
+          // that just 401'd, keep backing off in case Privy refreshes on a later tick.
+          if (token !== previousToken) return token
+        }
+        // A logged-out getter (no getter registered) yields null without a throw →
+        // no point retrying; the session is gone.
+        if (!authTokenGetter && !threw) return null
+      }
+      // Backoff exhausted: return whatever we last saw (same-as-before token or
+      // null). The caller treats a non-fresh result as "could not refresh" → logout.
+      return latest
+    })().finally(() => {
       refreshInFlight = null
     })
   }
   return refreshInFlight
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError'
@@ -144,7 +201,18 @@ async function parseError(res: Response): Promise<ApiError> {
   const parsed = errorEnvelopeSchema.safeParse(body)
   if (parsed.success) return new ApiError(parsed.data, res.status)
   // Non-enveloped failure — synthesize an envelope. Map by HTTP status.
-  const code: ErrorCode = res.status === 404 ? 'SKILL_NOT_FOUND' : 'SKILL_EXEC_ERROR'
+  // ⚠ A 401 from an infra/proxy/gateway/CDN auth layer arrives with an HTML or
+  // empty body (NOT the engine's JSON envelope). It MUST still classify as
+  // `UNAUTHENTICATED` so the re-auth/logout path (keyed on `error.code`) runs —
+  // otherwise a real session-expiry 401 would degrade to a dead error screen with
+  // a stale session and never drop the user to the login screen. Mirror the
+  // 404→SKILL_NOT_FOUND special-case.
+  const code: ErrorCode =
+    res.status === 401
+      ? 'UNAUTHENTICATED'
+      : res.status === 404
+        ? 'SKILL_NOT_FOUND'
+        : 'SKILL_EXEC_ERROR'
   return new ApiError(
     { code, message: res.statusText || `HTTP ${res.status}`, retryable: res.status >= 500 },
     res.status,
@@ -168,12 +236,12 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     return resolveMock<T>(path, init)
   }
 
-  const token = await getAuthToken()
+  let currentToken = await getAuthToken()
   const mergedHeaders = new Headers(headers)
   if (!(init.body instanceof FormData) && init.body != null && !mergedHeaders.has('Content-Type')) {
     mergedHeaders.set('Content-Type', 'application/json')
   }
-  if (token) mergedHeaders.set('Authorization', `Bearer ${token}`)
+  if (currentToken) mergedHeaders.set('Authorization', `Bearer ${currentToken}`)
   // INVARIANT: never set X-Service-Key here. The browser is JWT-only.
 
   // 401 re-auth is single-shot per request (W5): one silent refresh + retry, then
@@ -200,14 +268,20 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
         if (apiErr.code === 'UNAUTHENTICATED') {
           if (!reauthAttempted) {
             reauthAttempted = true
-            const fresh = await refreshAuthToken()
-            if (fresh) {
+            // Backoff-retry getAccessToken (Privy guidance). Only retry the request
+            // when Privy hands back a token DIFFERENT from the one that just 401'd —
+            // re-sending the identical bearer would just 401 again (a wasted attempt
+            // on the way to the same logout).
+            const fresh = await refreshAuthToken(currentToken)
+            if (fresh && fresh !== currentToken) {
+              currentToken = fresh
               mergedHeaders.set('Authorization', `Bearer ${fresh}`)
               attempt-- // this re-auth retry does not consume the network budget
               continue
             }
           }
-          // Already retried once (still 401) or no fresh token → log out + fail.
+          // Already retried once (still 401), or refresh yielded no NEW token (null
+          // or the same still-rejected token) → log out + fail. Fail closed.
           await logoutHandler?.()
           throw apiErr
         }

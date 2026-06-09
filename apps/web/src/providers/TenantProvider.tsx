@@ -27,7 +27,12 @@ import { ApiError, apiFetch } from '@/lib/api'
 /** The active tenant ids the SPA knows by route segment. Server is authoritative. */
 export type TenantId = 'mi-pase' | 'vino'
 
-/** Default tenant id for static, pre-resolution links (e.g. NotFound's CTA). */
+/**
+ * Canonical default tenant id. NOTE (PR2b harden): this is NOT used to drive any
+ * navigation target — the server is the tenant authority, so nav derives the tenant
+ * from `/v1/tenants/me` (RootRedirect). Kept only as the canonical-id constant
+ * (referenced by the rename regression test); do not reintroduce it into a URL.
+ */
 export const DEFAULT_TENANT: TenantId = 'mi-pase'
 
 /** Narrow an arbitrary string (e.g. a route param) to a known tenant id. */
