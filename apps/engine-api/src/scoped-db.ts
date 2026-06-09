@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { EngineError } from '@godin-engine/contract'
 import { db as defaultDb, schema } from '@godin-engine/db'
+import type { Consumer } from './auth'
+import { findTenantByMember, getTenant, isActive, type TenantRow } from './tenants'
 
 /**
  * forConsumer(db, consumerId) — the ONLY data path the /v1 routes use for
@@ -215,17 +217,40 @@ export function forConsumer(db: DbLike, consumerId: string): ScopedDb {
   }
 }
 
+/** Outcome of resolving a principal to its tenant (PR2). */
+export type ResolveTenantResult = { ok: true; tenant: TenantRow } | { ok: false }
+
 /**
- * resolveTenant(consumerId) seam (T2). For PR1 it ACCEPTS the existing mi-pase
- * tenant and any consumer present in SERVICE_KEYS. PR2 swaps the body for the
- * engine_tenants registry and rejects unknowns with TENANT_UNKNOWN. An empty
- * consumerId (a Privy principal that mapped to no tenant) is always unknown.
+ * resolveTenant(consumer) — the tenancy seam (PR2), now backed by the
+ * `engine_tenants` registry. It maps an AUTHENTICATED principal to its tenant ROW
+ * and fails closed (`{ ok: false }` → the route raises TENANT_UNKNOWN) on anything
+ * unresolvable. Two principal modes (see auth.ts):
+ *
+ *   - `service` — `consumer.id` IS the tenant id directly → `getTenant(id)`.
+ *   - `privy`   — find the (unique) tenant whose `members[]` contains the verified
+ *                 DID (`consumer.identity`). NONE → not-ok; MORE THAN ONE → reject
+ *                 as ambiguous (not-ok) rather than guess a tenant.
+ *
+ * BOTH paths then require the tenant to EXIST and be `status==='active'`
+ * (pending/disabled tenants never resolve). Returns the resolved row so callers
+ * (dispatch allow-list, GET /v1/tenants/me) can read `allowedWorkflows`/branding
+ * without a second registry hit.
+ *
+ * `db` is injectable so tests can pass a mock client; prod uses the default.
  */
-export function resolveTenant(
-  consumerId: string,
-  knownConsumers: Set<string> = new Set(),
-): { ok: true } | { ok: false } {
-  if (!consumerId) return { ok: false }
-  if (consumerId === 'mi-pase' || knownConsumers.has(consumerId)) return { ok: true }
-  return { ok: false }
+export async function resolveTenant(consumer: Consumer, db: DbLike = defaultDb): Promise<ResolveTenantResult> {
+  let row: TenantRow | undefined
+  if (consumer.mode === 'service') {
+    if (!consumer.id) return { ok: false }
+    row = await getTenant(consumer.id, db)
+  } else {
+    // privy — membership lookup by the verified DID.
+    if (!consumer.identity) return { ok: false }
+    const found = await findTenantByMember(consumer.identity, db)
+    if (!found || 'ambiguous' in found) return { ok: false } // none OR >1 → fail closed
+    row = found
+  }
+  if (!row) return { ok: false }
+  if (!isActive(row)) return { ok: false } // pending / disabled → fail closed
+  return { ok: true, tenant: row }
 }

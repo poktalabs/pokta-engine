@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { pgTable, pgEnum, text, jsonb, integer, numeric, timestamp, uniqueIndex, index, primaryKey } from 'drizzle-orm/pg-core'
 
 export const runStatus = pgEnum('run_status', ['queued', 'running', 'succeeded', 'failed'])
@@ -101,5 +102,57 @@ export const engineWorkflowState = pgTable(
   (t) => [
     primaryKey({ columns: [t.consumerId, t.workflowId, t.sku] }),
     index('workflow_state_status_idx').on(t.status),
+  ],
+)
+
+/**
+ * The tenant registry (PR2) — the SINGLE source of truth for tenancy. Each row's
+ * `tenantId` IS the `consumer_id` used everywhere else for row scoping (e.g.
+ * `mi-pase`). The engine resolves who a principal is, which workflows it may
+ * dispatch, and which env secret-prefix the worker reads, from THIS table:
+ *
+ *   - `status` — only `'active'` tenants may resolve/dispatch (pending/disabled
+ *     fail closed at resolveTenant + GET /v1/tenants/me).
+ *   - `branding` — typed against `TenantView.branding` in @godin-engine/contract
+ *     (`{ name: string; badge?: string }`); display-only, never authz.
+ *   - `allowedWorkflows` — the per-tenant workflow allow-list. The control plane
+ *     filters list surfaces by it and gates dispatch to it (a disallowed id is a
+ *     404 SKILL_NOT_FOUND — anti-enumeration). Every id MUST exist in the workflow
+ *     registry (validated on seed/save).
+ *   - `members` — the Privy DIDs allowed to act as this tenant. A `mode==='privy'`
+ *     principal resolves to the (unique) tenant whose `members[]` contains its DID;
+ *     none → TENANT_UNKNOWN, multiple → ambiguous → TENANT_UNKNOWN.
+ *   - `secretPrefix` — ops-owned env-var prefix the worker uses to read this
+ *     tenant's provider secrets (e.g. `MIPASE` → `MIPASE_SHOPIFY_*`). Charset
+ *     `^[A-Z][A-Z0-9_]*$`, UNIQUE across tenants (validated on seed/save).
+ *
+ * `currency` / `locale` are ISO display hints only — never used for authz.
+ */
+export const tenantStatus = pgEnum('tenant_status', ['active', 'pending', 'disabled'])
+
+export const engineTenants = pgTable(
+  'engine_tenants',
+  {
+    tenantId: text('tenant_id').primaryKey(), // == consumer_id, e.g. 'mi-pase'
+    name: text('name').notNull(),
+    status: tenantStatus('status').notNull().default('active'),
+    currency: text('currency').notNull(), // ISO 4217 — DISPLAY only
+    locale: text('locale').notNull(), // es-MX | en — DISPLAY only
+    branding: jsonb('branding').notNull(), // typed vs TenantView.branding
+    allowedWorkflows: text('allowed_workflows').array().notNull().default(sql`'{}'`),
+    members: text('members').array().notNull().default(sql`'{}'`), // allowed Privy DIDs
+    secretPrefix: text('secret_prefix'), // ops-owned; ^[A-Z][A-Z0-9_]*$ + UNIQUE
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('tenants_members_idx').on(t.members),
+    // secret_prefix UNIQUE at the DB (plan §4 + the column comment). Uniqueness was
+    // previously enforced ONLY in validateSeeds() over the in-memory seed array; an
+    // out-of-band INSERT/UPDATE could create two ACTIVE tenants sharing a prefix and
+    // thus read each other's provider env (e.g. both 'MIPASE' → both read
+    // MIPASE_SHOPIFY_ACCESS_TOKEN). The DB constraint makes that un-writable.
+    // Postgres treats multiple NULLs as distinct, so the nullable column is fine.
+    uniqueIndex('tenants_secret_prefix_unique').on(t.secretPrefix),
   ],
 )

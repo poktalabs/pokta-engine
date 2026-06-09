@@ -40,6 +40,18 @@ ALLOWLIST=(
   "demo.ts"
   "dashboard.ts"
   "console.ts"
+  # tenants.ts — the engine_tenants REGISTRY reader (PR2). engine_tenants is the
+  # tenancy CONFIG table, NOT an engine_runs-class tenant-DATA table: it holds the
+  # rows that DECIDE who a principal is and what it may do, and exposes no
+  # cross-tenant data read. Its reads are by-primary-key (getTenant) or by the
+  # members[] index (findTenantByMember); there is nothing here to scope to a
+  # consumer_id, so it is exempt by design (see tenants.ts header).
+  "tenants.ts"
+  # seed-tenants.ts — deploy-time idempotent upsert of the engine_tenants CONFIG
+  # table (run after db:migrate). Not a /v1 request handler; writes only the
+  # tenancy config rows (validated charset/uniqueness/manifest membership). It
+  # performs no cross-tenant DATA write. Exempt like tenants.ts.
+  "seed-tenants.ts"
 )
 
 # Raw-access patterns that must not appear in /v1 handler files.

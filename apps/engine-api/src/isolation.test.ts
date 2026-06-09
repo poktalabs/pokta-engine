@@ -49,7 +49,9 @@ const B_APPROVAL: Row = {
 }
 
 // In-memory store the mock reads from. Tests seed `runs`/`approvals`.
-const store: { runs: Row[]; approvals: Row[] } = { runs: [], approvals: [] }
+// `inserted` captures rows written by dispatchRun (transaction insert) so the
+// cross-tenant DISPATCH isolation case can assert the forced consumerId.
+const store: { runs: Row[]; approvals: Row[]; inserted: Row[] } = { runs: [], approvals: [], inserted: [] }
 
 /**
  * Extract the consumerId asserted by an `eq(R.consumerId, x)` clause anywhere in
@@ -137,7 +139,7 @@ vi.mock('@godin-engine/db', () => {
     transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         execute: async () => [],
-        insert: () => ({ values: async () => undefined }),
+        insert: () => ({ values: async (v: Row) => { store.inserted.push(v) } }),
         update: () => ({ set: () => ({ where: async () => undefined }) }),
       }),
     query: {
@@ -186,6 +188,30 @@ vi.mock('drizzle-orm', () => ({
   sql: Object.assign((..._a: unknown[]) => ({}), { raw: () => ({}) }),
 }))
 
+// ── ./tenants registry mock — needed only by the DISPATCH path (resolveTenant) ──
+// The read/approval isolation routes never call resolveTenant (they go straight
+// through forConsumer), so the cases above are unaffected by this mock. The
+// dispatch POST, however, is registry-backed post-swap: resolveTenant(consumer)
+// → getTenant(consumer.id), then the per-tenant allow-list gate. We mock the
+// registry so A=mi-pase and B=other are BOTH active, each with a DISJOINT
+// allow-list. This lets the dispatch-isolation case prove the registry swap did
+// NOT widen access: A cannot dispatch B's workflow, and A's own dispatch is
+// force-bound to A regardless of the body.
+const TENANTS: Record<string, { status: 'active' | 'pending' | 'disabled'; allowedWorkflows: string[] }> = {
+  'mi-pase': { status: 'active', allowedWorkflows: ['pricing-draft'] },
+  other: { status: 'active', allowedWorkflows: ['call-intake'] }, // B's workflow, NOT A's
+}
+vi.mock('./tenants', () => ({
+  getTenant: async (id: string) => {
+    const t = TENANTS[id]
+    return t ? { tenantId: id, name: id, status: t.status, allowedWorkflows: t.allowedWorkflows } : undefined
+  },
+  findTenantByMember: async () => undefined,
+  isActive: (row: { status: string }) => row.status === 'active',
+  allowedWorkflowsFor: (row: { allowedWorkflows: string[] }) => row.allowedWorkflows,
+  toTenantView: (row: { tenantId: string }) => ({ id: row.tenantId }),
+}))
+
 const { buildApp } = await import('./app')
 
 // Tenant A = mi-pase, Tenant B = other. A's header is what every probe carries.
@@ -195,6 +221,7 @@ const B_HEADER = { 'X-Service-Key': 'svc-key-other' }
 beforeEach(() => {
   store.runs = []
   store.approvals = []
+  store.inserted = []
   process.env.SERVICE_KEYS = 'mi-pase:svc-key-mipase,other:svc-key-other'
   process.env.OPERATOR_KEY = 'op-secret'
   delete process.env.PRIVY_TENANT_MAP
@@ -311,5 +338,86 @@ describe('positive controls — each tenant sees its OWN data', () => {
     expect(res.status).toBe(200)
     const body = (await res.json()) as { approvals: Array<{ approvalId: string }> }
     expect(body.approvals.map((a) => a.approvalId)).toContain('ap-B-1')
+  })
+})
+
+/**
+ * DISPATCH isolation under the registry swap (PR2 / ISOLATION ★). The dispatch
+ * POST is the one /v1 surface that now flows through resolveTenant→registry +
+ * the per-tenant allow-list gate. These cases prove the registry path did NOT
+ * widen access: a service-key tenant A still cannot act as B.
+ *
+ *   - A=mi-pase allow-list = ['pricing-draft']; B=other allow-list = ['call-intake'].
+ *   - Cross-tenant dispatch (A POSTing B's 'call-intake') → 404 SKILL_NOT_FOUND
+ *     (anti-enumeration: a disallowed id is indistinguishable from an unknown id),
+ *     and NOTHING is written.
+ *   - A's own allowed dispatch is force-bound to A's consumerId, even when the
+ *     body tries to claim B — the registry never re-targets the write.
+ */
+describe('dispatch isolation — registry swap does not widen cross-tenant access', () => {
+  it("A POSTing B's workflow ('call-intake', not in A's allow-list) → 404, nothing dispatched", async () => {
+    const app = buildApp()
+    const res = await app.request('/v1/workflows/call-intake/runs', {
+      method: 'POST',
+      headers: { ...A_HEADER, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: {} }),
+    })
+    // resolveTenant resolves A fine; the allow-list gate (after getWorkflow) 404s
+    // because 'call-intake' ∉ A's allow-list. Must be 404, never 403 (no leak that
+    // the workflow exists for another tenant) and never a dispatch.
+    expect(res.status).toBe(404)
+    expect(res.status).not.toBe(403)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('SKILL_NOT_FOUND')
+    expect(store.inserted).toHaveLength(0)
+  })
+
+  it("A's own dispatch is force-bound to A even when the body claims B (no re-target via registry)", async () => {
+    const app = buildApp()
+    const res = await app.request('/v1/workflows/pricing-draft/runs', {
+      method: 'POST',
+      headers: { ...A_HEADER, 'Content-Type': 'application/json' },
+      // hostile input field claims B; the forced consumerId must still be A.
+      body: JSON.stringify({ input: { consumerId: 'other', scope: 'vinos', limit: 3 } }),
+    })
+    expect(res.status).toBe(200)
+    expect(store.inserted).toHaveLength(1)
+    const inserted = store.inserted[0] as Row
+    expect(inserted.consumerId).toBe('mi-pase')
+    expect(inserted.consumerId).not.toBe('other')
+    expect(inserted.workflowId).toBe('pricing-draft')
+  })
+
+  it("A POSTing pricing-draft with body.consumer_id='other' → 400 ARGS_INVALID, nothing dispatched", async () => {
+    const app = buildApp()
+    const res = await app.request('/v1/workflows/pricing-draft/runs', {
+      method: 'POST',
+      headers: { ...A_HEADER, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consumer_id: 'other', input: { scope: 'vinos', limit: 3 } }),
+    })
+    // The body.consumer_id mismatch guard rejects an attempt to dispatch AS B,
+    // even though A is otherwise allow-listed for pricing-draft.
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('ARGS_INVALID')
+    expect(store.inserted).toHaveLength(0)
+  })
+
+  it("symmetry: B CAN dispatch its OWN workflow ('call-intake'), bound to B (not a blanket deny)", async () => {
+    const app = buildApp()
+    const res = await app.request('/v1/workflows/call-intake/runs', {
+      method: 'POST',
+      headers: { ...B_HEADER, 'Content-Type': 'application/json' },
+      // call-intake requires a non-empty transcript — supply valid input so the
+      // request reaches dispatch (the allow-list gate, not input validation, is
+      // what we are isolating here).
+      body: JSON.stringify({ input: { transcript: 'hi there, calling about a quote' } }),
+    })
+    // Proves the 404 above is isolation (A∌call-intake), not the workflow being
+    // globally unreachable. B is allow-listed for it, so B dispatches and the run
+    // is bound to B.
+    expect(res.status).toBe(200)
+    expect(store.inserted).toHaveLength(1)
+    expect((store.inserted[0] as Row).consumerId).toBe('other')
   })
 })
