@@ -12,6 +12,7 @@
     "build": "pnpm -r build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:scoped": "bash scripts/check-scoped-db.sh",
     "dev:api": "pnpm --filter @godin-engine/engine-api dev",
     "dev:worker": "pnpm --filter @godin-engine/worker dev",
     "db:generate": "pnpm --filter @godin-engine/db db:generate",
