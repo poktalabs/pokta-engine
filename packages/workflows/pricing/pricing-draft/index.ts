@@ -1,6 +1,10 @@
 import type { RunContext } from '@godin-engine/contract'
-import type { Catalog, ShopifyClient } from '@godin-engine/shopify'
-import type { MercadoLibreClient, MLSearchResult } from '@godin-engine/mercadolibre'
+import type {
+  Catalog,
+  ShopifyClient,
+  MercadoLibreClient,
+  MLSearchResult,
+} from '@godin-engine/integrations'
 
 import {
   buildProductIdentityFromShopify,
@@ -30,13 +34,13 @@ import {
  * Type the per-tenant integration clients this workflow asks for (D2). Until the
  * worker's provider plug-ins register their declaration merge (T9), the contract
  * resolves integration names to `unknown`; this augmentation gives `pricing-draft`
- * precise `shopify` / `mercadolibre` client types WITHOUT the contract importing
+ * precise `shopify` / `mercado-libre` client types WITHOUT the contract importing
  * either package. (Last-write-wins module augmentation; matches the seam doc.)
  */
 declare module '@godin-engine/contract' {
   interface IntegrationClients {
     shopify: ShopifyClient
-    mercadolibre: MercadoLibreClient
+    'mercado-libre': MercadoLibreClient
   }
 }
 
@@ -182,7 +186,7 @@ export async function run(
   if (input.limit != null) identities = identities.slice(0, input.limit)
 
   // 3. Paced ML competitor lookups (fail-soft per SKU).
-  const ml = ctx.integration('mercadolibre')
+  const ml = ctx.integration('mercado-libre')
   const competitors = await gatherCompetitors(identities, ml, ctx)
 
   // 4. Pure brain: match → 8-branch price → classify into confident | flagged.

@@ -6,12 +6,12 @@ vi.mock('@godin-engine/llm', () => ({
   completeJSON: vi.fn(),
 }))
 // Mock the Notion client module — proposal-step owns the fail-soft try/catch.
-vi.mock('@godin-engine/notion', () => ({
+vi.mock('@godin-engine/integrations', () => ({
   commitCrmEntry: vi.fn(),
 }))
 
 import { completeJSON } from '@godin-engine/llm'
-import { commitCrmEntry } from '@godin-engine/notion'
+import { commitCrmEntry } from '@godin-engine/integrations'
 import { run } from './index'
 
 const ctx: RunContext = {
@@ -19,7 +19,7 @@ const ctx: RunContext = {
   traceId: 'trace-1',
   logger: { info: vi.fn(), error: vi.fn() },
   artifactDir: '/tmp/run-1',
-  // proposal-step uses the @godin-engine/notion module directly, not ctx.integration;
+  // proposal-step uses the @godin-engine/integrations module directly, not ctx.integration;
   // a throwing stub satisfies the RunContext shape (D2) without being exercised.
   integration: (name: string) => {
     throw new Error(`integration('${name}') not stubbed in this test`)

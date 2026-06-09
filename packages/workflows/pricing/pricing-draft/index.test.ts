@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { RunContext } from '@godin-engine/contract'
-import type { Catalog, ShopifyClient } from '@godin-engine/shopify'
-import type { MercadoLibreClient, MLSearchResult } from '@godin-engine/mercadolibre'
+import type {
+  Catalog,
+  ShopifyClient,
+  MercadoLibreClient,
+  MLSearchResult,
+} from '@godin-engine/integrations'
 
 import { run } from './index'
 import type { DesiredRow, WorkflowStateStore } from './state-store'
@@ -45,7 +49,7 @@ function makeCtx(shopify: ShopifyClient, ml: MercadoLibreClient): RunContext {
     artifactDir: '/tmp/run-draft-1',
     integration: ((name: string) => {
       if (name === 'shopify') return shopify
-      if (name === 'mercadolibre') return ml
+      if (name === 'mercado-libre') return ml
       throw new Error(`integration('${name}') not stubbed`)
     }) as RunContext['integration'],
   }

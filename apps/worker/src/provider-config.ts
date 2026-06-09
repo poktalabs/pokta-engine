@@ -10,7 +10,7 @@
  *
  * Importing this module (which the worker does at boot) registers:
  *   - `shopify`       → per-tenant Shopify Admin client (dev store for mi-pase, D9)
- *   - `mercadolibre`  → per-tenant ML MX catalog client (+ OAuth refresh creds)
+ *   - `mercado-libre` → per-tenant ML MX catalog client (+ OAuth refresh creds)
  *
  * Each factory throws when the requested tenant is unconfigured; the resolver
  * turns that into the canonical "not configured for <consumer>" throw and the
@@ -30,28 +30,15 @@
 
 import {
   createShopifyClient,
-  type ShopifyClient,
   type ShopifyConfig,
-} from '@godin-engine/shopify'
-import {
   createMercadoLibreClient,
-  type MercadoLibreClient,
   type MercadoLibreConfig,
-} from '@godin-engine/mercadolibre'
-import { registerProvider } from './integration-resolver.js'
+  registerProvider,
+} from '@godin-engine/integrations'
 
-/**
- * Declaration merging (D2): teach the contract's `IntegrationClients` map the
- * concrete client type for each provider we register here. After this,
- * `ctx.integration('shopify')` is typed `ShopifyClient` (not `unknown`) for
- * every workflow, WITHOUT the contract package importing these packages.
- */
-declare module '@godin-engine/contract' {
-  interface IntegrationClients {
-    shopify: ShopifyClient
-    mercadolibre: MercadoLibreClient
-  }
-}
+// The `IntegrationClients` declaration-merge (D2) lives in the integrations
+// package now (it OWNS the type registry); importing from there pulls the merge
+// in, so `ctx.integration('shopify')` / ('mercado-libre') stay precisely typed.
 
 /** consumerId → its engine-env variable prefix. Add a row to onboard a tenant. */
 const ENV_PREFIX: Record<string, string> = {
@@ -107,7 +94,7 @@ function mercadoLibreConfigFor(consumerId: string): MercadoLibreConfig {
  */
 export function registerEngineProviders(): void {
   registerProvider('shopify', (consumerId: string) => createShopifyClient(shopifyConfigFor(consumerId)))
-  registerProvider('mercadolibre', (consumerId: string) =>
+  registerProvider('mercado-libre', (consumerId: string) =>
     createMercadoLibreClient(mercadoLibreConfigFor(consumerId)),
   )
 }

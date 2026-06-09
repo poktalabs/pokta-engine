@@ -13,11 +13,8 @@
   "dependencies": {
     "@godin-engine/contract": "workspace:*",
     "@godin-engine/db": "workspace:*",
+    "@godin-engine/integrations": "workspace:*",
     "@godin-engine/llm": "workspace:*",
-    "@godin-engine/mercadolibre": "workspace:*",
-    "@godin-engine/notion": "workspace:*",
-    "@godin-engine/resend": "workspace:*",
-    "@godin-engine/shopify": "workspace:*",
     "drizzle-orm": "^0.38.2",
     "zod": "^3.24.1"
   },

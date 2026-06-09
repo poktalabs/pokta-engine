@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { hasProvider, makeIntegrationResolver, unregisterProvider } from './integration-resolver'
+import { hasProvider, makeIntegrationResolver, unregisterProvider } from '@godin-engine/integrations'
 // Importing the module runs its side-effect: register the env-backed factories.
 import { registerEngineProviders } from './provider-config'
 
 /**
  * T9 — the env-backed per-tenant provider wiring (D2 / D9). Verifies the seam
  * between engine env and the resolver:
- *   - importing the module registers shopify + mercadolibre factories
+ *   - importing the module registers shopify + mercado-libre factories
  *   - a configured tenant (MIPASE_* present) resolves a real client
  *   - an unconfigured tenant fail-softs into the resolver's "not configured" throw
  *   - asking for one provider never reads the OTHER provider's env (blast radius)
@@ -44,7 +44,7 @@ afterEach(() => {
 describe('registerEngineProviders (T9)', () => {
   it('registers both M1 provider factories with the resolver', () => {
     expect(hasProvider('shopify')).toBe(true)
-    expect(hasProvider('mercadolibre')).toBe(true)
+    expect(hasProvider('mercado-libre')).toBe(true)
   })
 
   it('resolves a Shopify client for a configured mi-pase tenant', () => {
@@ -60,7 +60,7 @@ describe('registerEngineProviders (T9)', () => {
   it('resolves a Mercado Libre client for a configured mi-pase tenant', () => {
     process.env.MIPASE_ML_ACCESS_TOKEN = 'ml_test'
 
-    const client = makeIntegrationResolver('mi-pase')('mercadolibre')
+    const client = makeIntegrationResolver('mi-pase')('mercado-libre')
     expect(client).toBeDefined()
     expect((client as { configured: boolean }).configured).toBe(true)
     expect(typeof (client as { search: unknown }).search).toBe('function')
@@ -77,7 +77,7 @@ describe('registerEngineProviders (T9)', () => {
   it('Mercado Libre throws "not configured" when this tenant has no ML env', () => {
     process.env.MIPASE_SHOPIFY_BASE_URL = 'https://mi-pase-dev.myshopify.com/admin/api/2024-04'
     process.env.MIPASE_SHOPIFY_ACCESS_TOKEN = 'shpat_test'
-    expect(() => makeIntegrationResolver('mi-pase')('mercadolibre')).toThrow(
+    expect(() => makeIntegrationResolver('mi-pase')('mercado-libre')).toThrow(
       /not configured for consumer 'mi-pase'/i,
     )
   })
@@ -88,7 +88,7 @@ describe('registerEngineProviders (T9)', () => {
     process.env.MIPASE_ML_ACCESS_TOKEN = 'ml_test'
 
     expect(() => makeIntegrationResolver('unknown-tenant')('shopify')).toThrow(/not configured/i)
-    expect(() => makeIntegrationResolver('unknown-tenant')('mercadolibre')).toThrow(/not configured/i)
+    expect(() => makeIntegrationResolver('unknown-tenant')('mercado-libre')).toThrow(/not configured/i)
   })
 
   it('cleans up after itself (registry restored for downstream tests)', () => {

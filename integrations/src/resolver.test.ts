@@ -4,16 +4,16 @@ import {
   makeIntegrationResolver,
   registerProvider,
   unregisterProvider,
-} from './integration-resolver'
+} from '@godin-engine/integrations'
 
-// Stub provider clients — stand-ins for packages/shopify + packages/mercadolibre
-// (T3/T4), which plug into the same registry seam.
+// Stub provider clients — stand-ins for the shopify + mercado-libre modules,
+// which plug into the same registry seam via the worker's provider wiring.
 interface ShopifyStub {
   provider: 'shopify'
   consumerId: string
 }
 interface MlStub {
-  provider: 'mercadolibre'
+  provider: 'mercado-libre'
   consumerId: string
 }
 
@@ -27,13 +27,13 @@ describe('makeIntegrationResolver (T2 / D2)', () => {
     const shopifyFactory = vi.fn(
       (consumerId: string): ShopifyStub => ({ provider: 'shopify', consumerId }),
     )
-    const mlFactory = vi.fn((consumerId: string): MlStub => ({ provider: 'mercadolibre', consumerId }))
+    const mlFactory = vi.fn((consumerId: string): MlStub => ({ provider: 'mercado-libre', consumerId }))
     registerProvider('shopify', shopifyFactory)
-    registerProvider('mercadolibre', mlFactory)
+    registerProvider('mercado-libre', mlFactory)
 
     const integration = makeIntegrationResolver('mi-pase')
-    // `as unknown as` because provider-config.ts declaration-merges the REAL
-    // ShopifyClient onto IntegrationClients['shopify'] (T9); these tests use a
+    // `as unknown as` because the integrations package declaration-merges the REAL
+    // ShopifyClient onto IntegrationClients['shopify']; these tests use a
     // structural stub, which no longer overlaps that concrete type.
     const shopify = integration('shopify') as unknown as ShopifyStub
 
@@ -94,11 +94,11 @@ describe('makeIntegrationResolver (T2 / D2)', () => {
       throw new Error(`ML unconfigured for ${c}`)
     })
     registerProvider('shopify', shopifyFactory)
-    registerProvider('mercadolibre', mlFactory)
+    registerProvider('mercado-libre', mlFactory)
 
     const integration = makeIntegrationResolver('mi-pase')
     expect(() => integration('shopify')).not.toThrow()
-    // mercadolibre's (throwing) factory was never consulted
+    // mercado-libre's (throwing) factory was never consulted
     expect(mlFactory).not.toHaveBeenCalled()
   })
 })
@@ -114,10 +114,10 @@ describe('provider registry seam', () => {
 
   it('unregisterProvider(name) removes a single provider', () => {
     registerProvider('shopify', (c: string): ShopifyStub => ({ provider: 'shopify', consumerId: c }))
-    registerProvider('mercadolibre', (c: string): MlStub => ({ provider: 'mercadolibre', consumerId: c }))
+    registerProvider('mercado-libre', (c: string): MlStub => ({ provider: 'mercado-libre', consumerId: c }))
     unregisterProvider('shopify')
     expect(hasProvider('shopify')).toBe(false)
-    expect(hasProvider('mercadolibre')).toBe(true)
+    expect(hasProvider('mercado-libre')).toBe(true)
   })
 
   it('re-registering a name overrides the prior factory (last wins)', () => {

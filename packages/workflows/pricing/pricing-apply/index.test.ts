@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { RunContext } from '@godin-engine/contract'
-import type { ShopifyClient } from '@godin-engine/shopify'
+import type { ShopifyClient } from '@godin-engine/integrations'
 
 import { run, runFlagged, isWithinAntiThrash, selectSkus } from './index'
 import type {

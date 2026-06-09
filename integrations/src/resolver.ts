@@ -13,12 +13,11 @@
  *   MIPASE_ML_CLIENT_ID  / MIPASE_ML_CLIENT_SECRET / ...
  * (the encrypted per-tenant secret store is M-later — see the plan's NOT-in-scope).
  *
- * The concrete clients come from `packages/shopify` + `packages/mercadolibre`,
- * which land in a LATER phase (T3/T4). Until then they plug into the
- * `providerRegistry` seam below: each provider package registers a `factory`
- * that, given a `consumerId`, returns its configured client or throws when that
- * tenant is unconfigured. This file therefore compiles with zero provider
- * packages present, and gains them without edits as they register themselves.
+ * The concrete clients live in this package's `src/<provider>/` modules; the
+ * worker's `provider-config.ts` plugs per-tenant factories into the
+ * `providerRegistry` seam below: each provider registers a `factory` that, given
+ * a `consumerId`, returns its configured client or throws when that tenant is
+ * unconfigured.
  */
 
 import type { IntegrationAccessor, IntegrationFor, IntegrationName } from '@godin-engine/contract'
@@ -32,7 +31,7 @@ import type { IntegrationAccessor, IntegrationFor, IntegrationName } from '@godi
 export type ProviderFactory<C = unknown> = (consumerId: string) => C | null
 
 /**
- * The registry seam (D2). Provider packages register themselves by name; the
+ * The registry seam (D2). Provider wiring registers factories by name; the
  * resolver reads ONLY the entry matching the requested name. Kept as a plain
  * map (not a fat config object) so no single value exposes more than one
  * provider's client/secrets.
@@ -41,7 +40,7 @@ const providerRegistry = new Map<string, ProviderFactory>()
 
 /**
  * Register (or override) a provider's factory under its NAME. Called once at
- * worker boot by each provider package's plug-in. Idempotent per name (last
+ * worker boot by the per-tenant provider wiring. Idempotent per name (last
  * registration wins) so tests can re-register stubs cleanly.
  */
 export function registerProvider<C>(name: IntegrationName, factory: ProviderFactory<C>): void {
@@ -62,13 +61,13 @@ export function hasProvider(name: IntegrationName): boolean {
 /**
  * Build the lazy `ctx.integration` accessor for ONE run, closed over its
  * `consumerId`. Each call resolves exactly the requested provider:
- *   - unregistered provider  → throws (no package plugged it in)
+ *   - unregistered provider  → throws (no provider wiring plugged it in)
  *   - registered but the tenant is unconfigured (factory throws or returns null)
  *     → throws the canonical "<provider> not configured for <consumer>"
  *   - configured             → returns that provider's client, nothing else
  *
  * Because lookup is keyed strictly by the requested name, asking for 'shopify'
- * never touches the 'mercadolibre' factory (or its env) — and vice versa.
+ * never touches the 'mercado-libre' factory (or its env) — and vice versa.
  */
 export function makeIntegrationResolver(consumerId: string): IntegrationAccessor {
   const resolve = <N extends IntegrationName>(name: N) => {

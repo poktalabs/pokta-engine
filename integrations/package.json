@@ -1,5 +1,5 @@
 {
-  "name": "@godin-engine/notion",
+  "name": "@godin-engine/integrations",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,9 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@notionhq/client": "^2.2.15"
+    "@godin-engine/contract": "workspace:*",
+    "@notionhq/client": "^2.2.15",
+    "resend": "^4.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

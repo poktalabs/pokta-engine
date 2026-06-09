@@ -5,10 +5,10 @@ import { db, schema } from '@godin-engine/db'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { getWorkflow } from '@godin-engine/workflows'
 import { type DispatchEffects, dispatchOnSuccess } from './dispatch'
-import { makeIntegrationResolver } from './integration-resolver'
-// Side-effect import (T9): registers the env-backed shopify + mercadolibre
-// provider factories with the resolver, and declaration-merges their client
-// types into the contract's IntegrationClients map.
+import { makeIntegrationResolver } from '@godin-engine/integrations'
+// Side-effect import (T9): registers the env-backed shopify + mercado-libre
+// provider factories with the resolver. The IntegrationClients declaration-merge
+// is owned by the integrations package (pulled in via provider-config's import).
 import './provider-config'
 import { type ReaperEffects, reapStrandedRuns } from './reaper'
 

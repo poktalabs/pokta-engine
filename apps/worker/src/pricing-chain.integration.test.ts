@@ -4,7 +4,7 @@
  * Drives the REAL engine seams end-to-end against a REAL Postgres (the
  * `godin-engine-pg` dev container on :5434, the same DATABASE_URL the services
  * use), mocking ONLY at the package boundary the plan calls out: the `shopify`
- * and `mercadolibre` provider factories registered with the worker's integration
+ * and `mercado-libre` provider factories registered with the worker's integration
  * resolver (D2/D3). Everything between — `pricing-draft.run`, the post-success
  * fan-out (`dispatchOnSuccess` with live DB effects), the approval-gate row, the
  * approve→dispatch transaction (engine-api's logic, replayed faithfully), and
@@ -31,11 +31,17 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { RunContext } from '@godin-engine/contract'
-import type { Catalog, ShopifyClient, UpdatedVariant, VariantPriceUpdate } from '@godin-engine/shopify'
-import type { MercadoLibreClient, MLSearchResult } from '@godin-engine/mercadolibre'
+import type {
+  Catalog,
+  ShopifyClient,
+  UpdatedVariant,
+  VariantPriceUpdate,
+  MercadoLibreClient,
+  MLSearchResult,
+} from '@godin-engine/integrations'
 
 import { dispatchOnSuccess, type DispatchEffects } from './dispatch'
-import { makeIntegrationResolver, registerProvider, unregisterProvider } from './integration-resolver'
+import { makeIntegrationResolver, registerProvider, unregisterProvider } from '@godin-engine/integrations'
 
 // The dev container the services share (see docker-compose.yml / .env.example).
 const DEFAULT_DEV_DB = 'postgresql://postgres:postgres@localhost:5434/godin_engine'
@@ -302,7 +308,7 @@ beforeAll(async () => {
   // Register the mocked providers at the resolver boundary; the closures read the
   // per-phase holders so the same registration serves draft + every apply phase.
   registerProvider('shopify', () => shopifyClient)
-  registerProvider('mercadolibre', () => mlClient)
+  registerProvider('mercado-libre', () => mlClient)
 })
 
 afterAll(async () => {
@@ -313,7 +319,7 @@ afterAll(async () => {
   await db.delete(schema.engineRuns).where(eq(schema.engineRuns.consumerId, CONSUMER))
   // approvals are not consumer-scoped; delete by the runs we created is covered above.
   unregisterProvider('shopify')
-  unregisterProvider('mercadolibre')
+  unregisterProvider('mercado-libre')
   await sql.end({ timeout: 5 })
 })
 

@@ -1,5 +1,5 @@
 import type { RunContext } from '@godin-engine/contract'
-import type { ShopifyClient } from '@godin-engine/shopify'
+import type { ShopifyClient } from '@godin-engine/integrations'
 
 import type { ApplySku, PricingApplyInput } from './manifest.js'
 import {

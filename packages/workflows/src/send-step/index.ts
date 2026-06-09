@@ -1,5 +1,5 @@
 import type { IntegrationResult, RunContext } from '@godin-engine/contract'
-import { sendEmail } from '@godin-engine/resend'
+import { sendEmail } from '@godin-engine/integrations'
 import type { ClientEmail } from '../proposal-step'
 
 export interface SendOutput {

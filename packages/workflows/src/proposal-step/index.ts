@@ -1,6 +1,6 @@
 import type { IntegrationResult, RunContext } from '@godin-engine/contract'
 import { completeJSON } from '@godin-engine/llm'
-import { commitCrmEntry } from '@godin-engine/notion'
+import { commitCrmEntry } from '@godin-engine/integrations'
 import type { CrmEntry, Extraction } from '../call-intake'
 
 export interface ProposalLineItem {

@@ -69,15 +69,12 @@ importers:
       '@godin-engine/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@godin-engine/mercadolibre':
+      '@godin-engine/integrations':
         specifier: workspace:*
-        version: link:../../packages/mercadolibre
+        version: link:../../integrations
       '@godin-engine/queue':
         specifier: workspace:*
         version: link:../../packages/queue
-      '@godin-engine/shopify':
-        specifier: workspace:*
-        version: link:../../packages/shopify
       '@godin-engine/workflows':
         specifier: workspace:*
         version: link:../../packages/workflows
@@ -87,6 +84,22 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.22.4
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  integrations:
+    dependencies:
+      '@godin-engine/contract':
+        specifier: workspace:*
+        version: link:../packages/contract
+      '@notionhq/client':
+        specifier: ^2.2.15
+        version: 2.3.0
+      resend:
+        specifier: ^4.0.1
+        version: 4.8.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
     devDependencies:
       typescript:
         specifier: ^5.7.2
@@ -128,43 +141,11 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/mercadolibre:
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
-  packages/notion:
-    dependencies:
-      '@notionhq/client':
-        specifier: ^2.2.15
-        version: 2.3.0
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
   packages/queue:
     dependencies:
       pg-boss:
         specifier: ^10.1.6
         version: 10.4.2
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
-  packages/resend:
-    dependencies:
-      resend:
-        specifier: ^4.0.1
-        version: 4.8.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
-  packages/shopify:
     devDependencies:
       typescript:
         specifier: ^5.7.2
@@ -178,21 +159,12 @@ importers:
       '@godin-engine/db':
         specifier: workspace:*
         version: link:../db
+      '@godin-engine/integrations':
+        specifier: workspace:*
+        version: link:../../integrations
       '@godin-engine/llm':
         specifier: workspace:*
         version: link:../llm
-      '@godin-engine/mercadolibre':
-        specifier: workspace:*
-        version: link:../mercadolibre
-      '@godin-engine/notion':
-        specifier: workspace:*
-        version: link:../notion
-      '@godin-engine/resend':
-        specifier: workspace:*
-        version: link:../resend
-      '@godin-engine/shopify':
-        specifier: workspace:*
-        version: link:../shopify
       drizzle-orm:
         specifier: ^0.38.2
         version: 0.38.4(pg@8.21.0)(postgres@3.4.9)(react@19.2.7)
