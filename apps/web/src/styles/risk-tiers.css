@@ -1,0 +1,43 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Pokta Labs · godin-engine workspace — RISK TIERS (P1-C-risk)
+   Decided by Mel 2026-06-08 (M2 plan "Decisions resolved" #1): 3 tiers, NO new
+   brand color. Very-High folds into High.
+     Low    = --muted-foreground (muted ink / idle)
+     Medium = --status-warn       (brand amber)
+     High   = --status-fail       (brick ember — the only "stop" color)
+   Reuses existing tokens only — no change to tokens.css / status-tokens.css.
+   Import AFTER status-tokens.css. SEMANTIC use only — always pair with icon +
+   text label (brand rule: never meaning by color alone).
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --risk-low:       var(--muted-foreground);
+  --risk-med:       var(--status-warn);
+  --risk-high:      var(--status-fail);
+
+  /* derived tints — track the role colors, mirror the status-pill 12%/28% recipe */
+  --risk-low-bg:    color-mix(in srgb, var(--color-ink)   6%, var(--color-paper));
+  --risk-low-line:  var(--border);
+  --risk-med-bg:    color-mix(in srgb, var(--risk-med)   14%, var(--color-paper));
+  --risk-med-line:  color-mix(in srgb, var(--risk-med)   32%, transparent);
+  --risk-high-bg:   color-mix(in srgb, var(--risk-high)  10%, var(--color-paper));
+  --risk-high-line: color-mix(in srgb, var(--risk-high)  26%, transparent);
+}
+
+/* ─── Risk badge (SHARP — radius 0, hairline, mirrors .pill shape) ─────────── */
+.risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;          /* 11px */
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  border-radius: 0;
+}
+.risk-low  { color: var(--risk-low);  background: var(--risk-low-bg);  border-color: var(--risk-low-line); }
+.risk-med  { color: var(--risk-med);  background: var(--risk-med-bg);  border-color: var(--risk-med-line); }
+.risk-high { color: var(--risk-high); background: var(--risk-high-bg); border-color: var(--risk-high-line); }

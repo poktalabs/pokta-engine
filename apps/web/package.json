@@ -1,0 +1,48 @@
+{
+  "name": "@godin-engine/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "serve dist -s -l $PORT",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/funnel-display": "^5.2.5",
+    "@fontsource-variable/manrope": "^5.2.5",
+    "@fontsource-variable/source-serif-4": "^5.2.5",
+    "@godin-engine/contract": "workspace:*",
+    "@privy-io/react-auth": "^3.28.0",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@sentry/react": "^10.42.0",
+    "@tanstack/react-query": "^5.64.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.575.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0",
+    "react-virtuoso": "^4.18.3",
+    "serve": "^14.2.4",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.1.0"
+  },
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.0",
+    "lightningcss-linux-x64-gnu": "1.32.0"
+  }
+}

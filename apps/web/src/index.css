@@ -1,0 +1,55 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   godin-engine workspace SPA — app entry stylesheet (P1-A0, THE token gate).
+
+   Load order matters in Tailwind v4 (all @import must precede other rules):
+     1. tailwindcss core
+     2. typography plugin
+     3. self-hosted fonts (Fontsource variable) — brand-locked, no Google Fonts
+     4. repo design-system tokens (app owns its copy under ./styles)
+     5. status tokens, then the two P1-C design-decision files
+     6. @theme inline mapping for the font families + radius-0 enforcement
+   ───────────────────────────────────────────────────────────────────────── */
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Self-hosted variable fonts (Pokta Labs stack via Fontsource — NOT Google Fonts). */
+@import "@fontsource-variable/source-serif-4";
+@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/funnel-display";
+
+/* Design system (the app owns its copy — see ./styles/tokens.css header note). */
+@import "./styles/tokens.css";
+@import "./styles/status-tokens.css";
+@import "./styles/light-form-fields.css";
+@import "./styles/risk-tiers.css";
+
+/* ─── Theme mapping: expose the brand font tokens to Tailwind utilities ──────
+   `inline` so `font-serif`/`font-sans`/`font-funnel` resolve against the CSS
+   custom properties declared in tokens.css (Fontsource provides the actual
+   variable font families above). */
+@theme inline {
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+  --font-funnel: var(--font-funnel);
+
+  /* Brand shape DNA: radius 0 everywhere. Map every Tailwind radius step to 0 so
+     `rounded`, `rounded-md`, `rounded-full`, etc. all stay SHARP. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+}
+
+/* Hard global enforcement: nothing rounds, regardless of utility class. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-radius: 0 !important;
+  }
+}

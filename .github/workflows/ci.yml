@@ -48,6 +48,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Typecheck web SPA
+        run: pnpm --filter @godin-engine/web typecheck
+
       - name: Apply migrations (creates engine_* tables for the integration test)
         run: pnpm --filter @godin-engine/db db:migrate
 

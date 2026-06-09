@@ -1,5 +1,7 @@
 export * from './errors'
 export * from './policy'
 export * from './run'
+export * from './run-views'
+export * from './approval'
 export * from './manifest'
 export * from './integration'
