@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { EngineError } from '@godin-engine/contract'
+import type { WorkflowCard } from '@godin-engine/contract'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import type { Consumer } from './auth'
 import { findTenantByMember, getTenant, isActive, type TenantRow } from './tenants'
@@ -68,11 +69,41 @@ export interface ScopedDb {
     approvalId: string
     decidedBy: string
   }): Promise<{ ok: true } | { ok: false; reason: 'not-found' }>
+
+  /** This tenant's integration connection rows (P5b), scoped to consumerId. */
+  listTenantIntegrations(): Promise<Array<typeof schema.engineTenantIntegrations.$inferSelect>>
+
+  /**
+   * This tenant's runs whose workflowId is in `workflowIds` (P5b workspace family
+   * filter), newest first. Scoped to consumerId; an empty `workflowIds` → `[]`.
+   */
+  listRunsForWorkflows(
+    workflowIds: string[],
+    opts?: { limit?: number },
+  ): Promise<Array<typeof schema.engineRuns.$inferSelect>>
+
+  /**
+   * Build the workspace workflow CARDS (P5b) for this tenant. Fetches the tenant's
+   * recent runs ONCE and pending approvals ONCE (both scoped), then folds them in
+   * memory per card — NO per-card query (no N+1). For each card: `lastRun` is the
+   * newest run whose workflowId ∈ the card's family member ids (or null);
+   * `pendingApprovals` is the count of pending approvals across the family.
+   */
+  workspaceWorkflowCards(
+    cards: Array<{
+      id: string
+      displayName: string
+      trigger: string
+      memberWorkflowIds: string[]
+      hasDetail: boolean
+    }>,
+  ): Promise<WorkflowCard[]>
 }
 
 export function forConsumer(db: DbLike, consumerId: string): ScopedDb {
   const R = schema.engineRuns
   const A = schema.engineApprovals
+  const I = schema.engineTenantIntegrations
 
   async function getRun(runId: string) {
     return db.query.engineRuns.findFirst({
@@ -213,6 +244,58 @@ export function forConsumer(db: DbLike, consumerId: string): ScopedDb {
         .returning({ approvalId: A.approvalId })
       if (updated.length === 0) return { ok: false, reason: 'not-found' }
       return { ok: true }
+    },
+
+    async listTenantIntegrations() {
+      return db.select().from(I).where(eq(I.tenantId, consumerId))
+    },
+
+    async listRunsForWorkflows(workflowIds, opts = {}) {
+      if (workflowIds.length === 0) return []
+      return db
+        .select()
+        .from(R)
+        .where(and(eq(R.consumerId, consumerId), inArray(R.workflowId, workflowIds)))
+        .orderBy(desc(R.createdAt))
+        .limit(opts.limit ?? 200)
+    },
+
+    async workspaceWorkflowCards(cards) {
+      // ONE scoped runs read + ONE scoped pending-approvals read, folded in memory
+      // (no per-card query → no N+1, Codex#10).
+      const runs = await db
+        .select()
+        .from(R)
+        .where(eq(R.consumerId, consumerId))
+        .orderBy(desc(R.createdAt))
+        .limit(200)
+      const approvalRows = await db
+        .select({ approval: A })
+        .from(A)
+        .innerJoin(R, eq(A.sourceRunId, R.runId))
+        .where(and(eq(R.consumerId, consumerId), eq(A.state, 'pending')))
+        .limit(200)
+      const pendingApprovals = approvalRows.map((r) => r.approval)
+
+      return cards.map((card) => {
+        const members = new Set(card.memberWorkflowIds)
+        // runs are already newest-first → the first match is the most recent.
+        const last = runs.find((run) => members.has(run.workflowId))
+        const pending = pendingApprovals.filter((a) => members.has(a.workflowId)).length
+        return {
+          id: card.id,
+          displayName: card.displayName,
+          trigger: card.trigger,
+          lastRun: last
+            ? {
+                status: last.status,
+                at: (last.createdAt instanceof Date ? last.createdAt.toISOString() : String(last.createdAt)),
+              }
+            : null,
+          pendingApprovals: pending,
+          hasDetail: card.hasDetail,
+        }
+      })
     },
   }
 }

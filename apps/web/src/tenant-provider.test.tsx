@@ -37,7 +37,6 @@ const MI_PASE_VIEW: TenantView = {
   locale: 'es-MX',
   branding: { name: 'Mi Pase', badge: 'Shopify test store' },
   allowedWorkflows: ['pricing-draft', 'pricing-apply-confident'],
-  integrations: [],
 }
 
 // A DELIBERATELY DIFFERENT tenant view — proves the projected config tracks the
@@ -50,7 +49,6 @@ const VINO_VIEW: TenantView = {
   locale: 'en',
   branding: { name: 'Vino Design Build', badge: 'Studio' },
   allowedWorkflows: ['call-intake', 'proposal-step'],
-  integrations: [],
 }
 
 beforeEach(() => {

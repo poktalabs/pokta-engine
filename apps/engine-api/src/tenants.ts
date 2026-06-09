@@ -1,7 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import { listManifests } from '@godin-engine/workflows'
-import { listIntegrations } from '@godin-engine/integrations'
 import type { TenantView, TenantStatus } from '@godin-engine/contract'
 
 /**
@@ -127,15 +126,14 @@ export function allowedWorkflowsFor(row: Pick<TenantRow, 'allowedWorkflows'>): s
  * toTenantView(row, allowedWorkflowsFiltered) — project a registry row into the
  * shared `TenantView` (`@godin-engine/contract`). `branding` is coerced to the
  * typed `{ name; badge? }` shape; `allowedWorkflows` is the caller-supplied,
- * already-filtered set (defaults to `allowedWorkflowsFor(row)`); `integrations`
- * is intentionally derived from the LIVE integration registry (validated +
- * enriched) — PR2 has no per-tenant integration column yet, so a tenant surfaces
- * the integrations the engine actually ships. Server-only fields (`members`,
- * `secretPrefix`) are never included.
+ * already-filtered set (defaults to `allowedWorkflowsFor(row)`). Integrations are
+ * NO LONGER part of this view (D-Codex#4 / P5b) — a tenant's per-integration
+ * connection status is its own surface (`GET /v1/integrations`, backed by
+ * `engine_tenant_integrations`). Server-only fields (`members`, `secretPrefix`)
+ * are never included.
  */
 export function toTenantView(row: TenantRow, allowedWorkflowsFiltered?: string[]): TenantView {
   const branding = (row.branding ?? {}) as { name?: string; badge?: string }
-  const integrations = listIntegrations().map((d) => d.id)
   return {
     id: row.tenantId,
     name: row.name,
@@ -147,6 +145,5 @@ export function toTenantView(row: TenantRow, allowedWorkflowsFiltered?: string[]
       ...(branding.badge ? { badge: branding.badge } : {}),
     },
     allowedWorkflows: allowedWorkflowsFiltered ?? allowedWorkflowsFor(row),
-    integrations,
   }
 }
