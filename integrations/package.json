@@ -1,0 +1,21 @@
+{
+  "name": "@godin-engine/integrations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@godin-engine/contract": "workspace:*",
+    "@notionhq/client": "^2.2.15",
+    "resend": "^4.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

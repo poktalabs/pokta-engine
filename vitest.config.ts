@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config'
 
 // Phase 0 test harness (D6). Lanes add *.test.ts next to the code they cover:
-//   packages/notion, packages/resend (unit), workflows/* (fail-soft), engine-api (shape).
+//   packages/notion, packages/resend (unit), packages/workflows/* (fail-soft), apps/engine-api (shape).
 export default defineConfig({
   test: {
     include: ['**/*.test.ts'],

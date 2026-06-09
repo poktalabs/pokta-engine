@@ -8,10 +8,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "typecheck": "pnpm -r typecheck",
-    "build": "pnpm -r build",
+    "typecheck": "turbo run typecheck",
+    "build": "turbo run build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:scoped": "bash scripts/check-scoped-db.sh",
     "dev:api": "pnpm --filter @godin-engine/engine-api dev",
     "dev:worker": "pnpm --filter @godin-engine/worker dev",
     "db:generate": "pnpm --filter @godin-engine/db db:generate",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "tsx": "^4.19.2",
+    "turbo": "^2.3.3",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8",
     "@types/node": "^22.10.2"

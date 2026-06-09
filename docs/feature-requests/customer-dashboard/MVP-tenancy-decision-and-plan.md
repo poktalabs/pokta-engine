@@ -146,12 +146,15 @@ REGRESSION ★    existing M1 single-tenant mi-pase chained flow still green pos
 Synthesized from this review. PR-sliced (3 sequential PRs). Checkbox as you ship.
 
 **PR1 — Tier 1 security rails (serial; security spine; ship + deploy alone)**
-- [ ] **T1 (P1, human ~1d / CC ~1h)** — auth — one middleware: service-key→consumer + Privy-JWT(JWKS)→consumer → `c.set('consumer')`
-  - Files: `engine-api/src/auth.ts`, `engine-api/src/index.ts` · Verify: AUTH test block
-- [ ] **T2 (P1, human ~1d / CC ~1h)** — scoping — `forConsumer()` scoped-query helper; route all run/approval reads+writes through it; 404 cross-tenant; bind `decided_by` to ctx
-  - Files: new `engine-api/src/scoped-db.ts`, `engine-api/src/index.ts` · Verify: ISOLATION + SCOPED HELPER blocks
-- [ ] **T3 (P1, human ~halfday / CC ~30min)** — lock `/demo` `/dashboard` `/console` behind operator auth (or stop serving to clients)
-  - Files: `engine-api/src/{index,demo,dashboard,console}.ts` · Verify: unauth → 401
+- [x] **T1 (P1, human ~1d / CC ~1h)** — auth — one middleware: service-key→consumer + Privy-JWT(JWKS)→consumer → `c.set('consumer')`
+  - Files: `engine-api/src/auth.ts`, `engine-api/src/app.ts`, `engine-api/src/index.ts` · Verify: AUTH test block
+  - Done (M1.5): `consumerAuth()` resolves X-Service-Key (keeps consumerId) OR Bearer Privy JWT (injectable `verifyPrivyToken` seam); fail-closed 401 UNAUTHENTICATED; app extracted to `app.ts` (`buildApp()`, no import-time side effects).
+- [x] **T2 (P1, human ~1d / CC ~1h)** — scoping — `forConsumer()` scoped-query helper; route all run/approval reads+writes through it; 404 cross-tenant; bind `decided_by` to ctx
+  - Files: new `engine-api/src/scoped-db.ts`, `engine-api/src/app.ts` · Verify: ISOLATION + SCOPED HELPER blocks
+  - Done (M1.5): `forConsumer(db, consumerId)` is the only data path; approvals scoped via source-run join; cross-tenant → undefined → 404; `decided_by` bound to `ctx.consumer.identity`; `resolveTenant()` seam (accepts mi-pase + SERVICE_KEYS consumers).
+- [x] **T3 (P1, human ~halfday / CC ~30min)** — lock `/demo` `/dashboard` `/console` behind operator auth (or stop serving to clients)
+  - Files: `engine-api/src/app.ts` · Verify: unauth → 401
+  - Done (M1.5): `operatorAuth()` gate at `buildApp()` composition level (X-Operator-Key === OPERATOR_KEY; unset → 404, fail closed). Mount fns untouched so `dashboard.test.ts` stays green.
 - [ ] **T4 (P1, human ~halfday / CC ~40min)** — cross-tenant isolation + regression test suite
   - Files: `engine-api/src/*.test.ts` · Verify: full matrix green incl. M1 regression ★
 

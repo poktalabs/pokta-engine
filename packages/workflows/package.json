@@ -1,0 +1,24 @@
+{
+  "name": "@godin-engine/workflows",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc -p pricing/tsconfig.json --noEmit",
+    "build": "tsc --noEmit && tsc -p pricing/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@godin-engine/contract": "workspace:*",
+    "@godin-engine/db": "workspace:*",
+    "@godin-engine/integrations": "workspace:*",
+    "@godin-engine/llm": "workspace:*",
+    "drizzle-orm": "^0.38.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
