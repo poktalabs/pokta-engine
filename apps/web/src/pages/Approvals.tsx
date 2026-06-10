@@ -1,71 +1,151 @@
-import { useMemo } from 'react'
-import type { ApprovalView } from '@godin-engine/contract'
-import { useTenant } from '@/providers/TenantProvider'
+import { useCallback, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import type {
+  ApprovalView,
+  ApproveResponse,
+  ErrorEnvelope,
+  RejectResponse,
+} from '@godin-engine/contract'
+import { ApiError, apiFetch } from '@/lib/api'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { ApprovalQueueFrame } from '@/features/approvals/ApprovalQueueFrame'
 import type {
   ApprovalRenderer,
   DecisionHandler,
+  PartialFailure,
 } from '@/features/approvals/types'
 import { batchApprovalRenderer } from '@/features/approvals/renderers/BatchApprovalRenderer'
 import { singleActionRenderer } from '@/features/approvals/renderers/SingleActionRenderer'
-import { MOCK_BATCH_ROWS } from '@/mocks/approvals.batch'
-import { MOCK_VINO_APPROVALS } from '@/mocks/approvals.single'
+import { useApprovals } from './use-approvals'
 
 /**
- * Approvals surface (M2 P2).
+ * Approvals surface (P5b-wired).
  *
- * Mounts the universal `ApprovalQueueFrame` and selects a renderer by the active
- * TENANT (== the items' `workflowId` domain): Mi Pase's `mipase.*` daily-pricing
- * queue gets the virtualized `BatchApprovalRenderer` (P2-B, the hero); Vino's
- * `vino.*` queue gets the focused `SingleActionRenderer` (P2-C). The plan's
- * central thesis holds here — between tenants the ONLY thing that changes is the
- * `renderer` prop (and its mock queue); the frame, the 6-state machine, the async
- * lifecycle, the audit trail and the a11y contract are all shared.
+ * Wires the universal `ApprovalQueueFrame` to the LIVE read model
+ * (GET /v1/approvals) via `useApprovals`, and the approve/reject decisions to the
+ * real mutations (POST /v1/approvals/:id/approve | /reject). The renderer is
+ * selected by the items' `workflowId` domain (`mipase.*` → the virtualized batch
+ * table, otherwise → the focused single-action card) — the plan's thesis: the only
+ * thing that changes between tenants is the `renderer` prop.
  *
- * Both renderers own their own action surface (`ownsActionBar`), so the frame
- * suppresses its generic batch bar to avoid a duplicate Approve/Reject.
+ * The decision handler POSTs per-id and collects any failures into a
+ * `PartialFailure` so the frame surfaces "Retry failed". It branches on
+ * `ApiError.code`: `APPROVAL_DENIED` (already-decided / not-permitted) is the
+ * expected per-item failure, recorded as a failed id rather than a thrown crash.
+ *
+ * Graceful degradation (D3): loading / empty / error are all rendered cleanly
+ * (the frame owns the empty state once items resolve to `[]`).
  */
 
-interface TenantQueue {
-  items: ApprovalView[]
-  renderer: ApprovalRenderer
-  target: { what: string; where: string }
-  risk?: { tier: 'low' | 'medium' | 'high'; label: string }
+/** Pick the renderer for a queue from the items' workflow domain. */
+function rendererFor(items: ApprovalView[]): ApprovalRenderer {
+  const first = items[0]
+  if (first && first.workflowId.startsWith('mipase')) return batchApprovalRenderer
+  return singleActionRenderer
 }
 
-/** Resolve the active tenant's pending queue + its renderer from mock data. */
-function useApprovalQueue(tenantId: string): TenantQueue {
-  return useMemo<TenantQueue>(() => {
-    if (tenantId === 'vino') {
-      return {
-        items: MOCK_VINO_APPROVALS,
-        renderer: singleActionRenderer,
-        target: { what: 'Run drafted actions', where: 'Vino integrations' },
-      }
-    }
-    // Default / Mi Pase: the daily-pricing batch, one ApprovalView per flagged row.
+/** Coarse target/risk header copy derived from the selected renderer. */
+function headerFor(renderer: ApprovalRenderer): {
+  target: { what: string; where: string }
+  risk?: { tier: 'low' | 'medium' | 'high'; label: string }
+} {
+  if (renderer === batchApprovalRenderer) {
     return {
-      items: MOCK_BATCH_ROWS,
-      renderer: batchApprovalRenderer,
       target: { what: 'Apply suggested prices', where: 'Shopify · test store' },
       risk: { tier: 'medium', label: 'Price changes' },
     }
-  }, [tenantId])
-}
-
-/**
- * Mock decision handler — succeeds without touching the network (mock-data-first,
- * behind `VITE_USE_MOCKS`). P5b swaps this for the real `apiFetch` mutation hook,
- * which returns a `PartialFailure` when some items fail (the frame already renders
- * that state + "Retry failed").
- */
-const mockDecision: DecisionHandler = async () => {
-  await new Promise((r) => setTimeout(r, 200))
+  }
+  return { target: { what: 'Run drafted actions', where: 'Connected integrations' } }
 }
 
 export default function Approvals() {
-  const tenant = useTenant()
-  const { items, renderer, target, risk } = useApprovalQueue(tenant.id)
+  const { data, isPending, isError, error, refetch } = useApprovals()
+  const queryClient = useQueryClient()
+
+  const items = useMemo<ApprovalView[]>(() => data?.approvals ?? [], [data])
+  const renderer = useMemo(() => rendererFor(items), [items])
+  const { target, risk } = useMemo(() => headerFor(renderer), [renderer])
+
+  /**
+   * Real decision handler. POSTs approve/reject for every approval id in the
+   * request, collecting failures. A single-id failure becomes a `PartialFailure`
+   * the frame renders; a clean run resolves void (full success) and refetches the
+   * worklist so decided items drop off.
+   */
+  const onDecision = useCallback<DecisionHandler>(
+    async (request, kind) => {
+      const ids = request.approvalIds
+      const failedItemIds: string[] = []
+      const errors: ErrorEnvelope[] = []
+
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            if (kind === 'approve') {
+              await apiFetch<ApproveResponse>(`/v1/approvals/${encodeURIComponent(id)}/approve`, {
+                method: 'POST',
+              })
+            } else {
+              await apiFetch<RejectResponse>(`/v1/approvals/${encodeURIComponent(id)}/reject`, {
+                method: 'POST',
+              })
+            }
+          } catch (err) {
+            // Branch on the typed envelope code: APPROVAL_DENIED (already decided /
+            // not permitted) and any other failure are recorded per-item so the
+            // frame can flag exactly which rows failed + offer "Retry failed".
+            failedItemIds.push(id)
+            if (err instanceof ApiError) errors.push(err.envelope)
+            else
+              errors.push({
+                code: 'SKILL_EXEC_ERROR',
+                message: 'The decision could not be submitted. Please retry.',
+                retryable: true,
+              })
+          }
+        }),
+      )
+
+      // Refresh the worklist so decided items drop off (even on partial failure).
+      void queryClient.invalidateQueries({ queryKey: ['approvals'] })
+
+      if (failedItemIds.length > 0) {
+        return { failedItemIds, errors } satisfies PartialFailure
+      }
+      // Full success → void.
+    },
+    [queryClient],
+  )
+
+  if (isPending) {
+    return (
+      <section className="space-y-6">
+        <header className="space-y-1">
+          <h1 className="font-serif text-3xl leading-tight text-[var(--foreground)]">
+            Approvals
+          </h1>
+          <p className="text-sm text-[var(--foreground-soft)]">
+            Review and approve what your agents have drafted.
+          </p>
+        </header>
+        <LoadingState label="Loading approvals…" />
+      </section>
+    )
+  }
+
+  if (isError) {
+    return (
+      <section className="space-y-6">
+        <header className="space-y-1">
+          <h1 className="font-serif text-3xl leading-tight text-[var(--foreground)]">
+            Approvals
+          </h1>
+        </header>
+        <ErrorState error={error?.envelope} onRetry={() => void refetch()} />
+      </section>
+    )
+  }
 
   return (
     <ApprovalQueueFrame
@@ -73,7 +153,7 @@ export default function Approvals() {
       description="Review and approve what your agents have drafted."
       items={items}
       renderer={renderer}
-      onDecision={mockDecision}
+      onDecision={onDecision}
       target={target}
       risk={risk}
     />

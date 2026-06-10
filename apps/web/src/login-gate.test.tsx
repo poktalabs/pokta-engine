@@ -152,17 +152,19 @@ describe('TOKEN — live-path request carries Bearer JWT, never X-Service-Key', 
   it('mocked (non-live) paths resolve via the registry, not the network', async () => {
     // No token getter registered here on purpose: a mocked path must short-circuit
     // to `resolveMock` BEFORE any token lookup or network call (VITE_USE_MOCKS=true
-    // in the test env; only LIVE_PATHS hit fetch).
+    // in the test env; only LIVE_PATHS hit fetch). `/v1/reports` is a genuinely
+    // NON-live path post P5b Wave 2 (Reports is a deferred ComingSoon surface, so
+    // it is deliberately absent from LIVE_PATHS) and still has a registry fixture.
     setPrivyState({ ready: true, authenticated: true, token: 'jwt-abc-123' })
 
-    const approvals = await apiFetch<{ approvals: unknown[] }>('/v1/approvals')
+    const reports = await apiFetch<{ reports: unknown[] }>('/v1/reports')
 
-    // Registry fixture resolved (approvals mock registers GET /v1/approvals →
-    // `{ approvals: [...] }`)…
-    expect(approvals).toBeDefined()
-    expect(Array.isArray((approvals as { approvals?: unknown[] }).approvals)).toBe(true)
+    // Registry fixture resolved (reports mock registers GET /v1/reports →
+    // `{ reports: [...] }`)…
+    expect(reports).toBeDefined()
+    expect(Array.isArray((reports as { reports?: unknown[] }).reports)).toBe(true)
     // …and it NEVER touched the live-path fetch stub.
-    expect(capturedRequests.some((r) => r.path.startsWith('/v1/approvals'))).toBe(false)
+    expect(capturedRequests.some((r) => r.path.startsWith('/v1/reports'))).toBe(false)
   })
 
   it('a live-path token getter is bridged via AuthTokenBridge, and unmount clears it', async () => {
