@@ -76,7 +76,7 @@ vi.mock('@godin-engine/db', () => {
   }
 })
 
-import { TENANT_SEEDS, seedTenants, type TenantSeed } from './seed-tenants'
+import { TENANT_SEEDS, seedTenants, validateMemberDids, type TenantSeed } from './seed-tenants'
 
 /** A minimal valid tenant seed; tests override the field under test. */
 function seed(overrides: Partial<TenantSeed> = {}): TenantSeed {
@@ -197,6 +197,56 @@ describe('Wave 0 SEED REWIRE — member DIDs bind into engine_tenant_members (in
     expect(boundDids('vino')).toContain('did:privy:vino-only')
     expect(boundDids('vino')).not.toContain('did:privy:mp-only')
   })
+
+  // ── Cross-tenant duplicate DID fails FAST, all-or-nothing (no partial seed) ──
+  it('a DID shared across two tenants env vars fails the seed FAST with a naming error and writes NO partial membership', async () => {
+    // The same operator DID misconfigured under BOTH prefixes. Under the OLD array
+    // model both arrays got it (then resolved fail-closed ambiguous); under UNIQUE(did)
+    // the per-DID bind would throw MID-LOOP after mi-pase's row was already upserted.
+    // The pre-write validateMemberDids gate must abort BEFORE any write instead.
+    process.env.MIPASE_MEMBER_DIDS = 'did:privy:shared'
+    process.env.VINO_MEMBER_DIDS = 'did:privy:shared'
+    await expect(seedTenants(undefined, TENANT_SEEDS)).rejects.toThrow(
+      /member DID 'did:privy:shared' is bound to more than one tenant.*'mi-pase'.*'vino'/,
+    )
+    // All-or-nothing: nothing was bound and no tenant row was partially written.
+    expect(writes.memberBinds).toHaveLength(0)
+    expect(writes.upserts).toHaveLength(0)
+  })
+
+  it('validateMemberDids passes a collision-free set and rejects a static-vs-env cross-tenant collision', () => {
+    const env = (prefix: string | null): string[] =>
+      prefix === 'BBB' ? ['did:privy:dup'] : []
+    // Collision-free (distinct DIDs) → no throw.
+    expect(() =>
+      validateMemberDids(
+        [
+          seed({ tenantId: 'a', secretPrefix: 'AAA', members: ['did:privy:a-only'] }),
+          seed({ tenantId: 'b', secretPrefix: 'BBB', members: [] }),
+        ],
+        env,
+      ),
+    ).not.toThrow()
+    // Tenant a carries the DID statically; tenant b pulls the SAME DID from env → reject.
+    expect(() =>
+      validateMemberDids(
+        [
+          seed({ tenantId: 'a', secretPrefix: 'AAA', members: ['did:privy:dup'] }),
+          seed({ tenantId: 'b', secretPrefix: 'BBB', members: [] }),
+        ],
+        env,
+      ),
+    ).toThrow(/member DID 'did:privy:dup' is bound to more than one tenant/)
+  })
+
+  it('the SAME DID listed twice for the SAME tenant is NOT a collision (idempotent union)', () => {
+    expect(() =>
+      validateMemberDids(
+        [seed({ tenantId: 'a', secretPrefix: 'AAA', members: ['did:privy:x', 'did:privy:x'] })],
+        () => [],
+      ),
+    ).not.toThrow()
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,5 +286,23 @@ describe('Wave 0 MIGRATION INTENT — 0005 copies members BEFORE dropping the co
     expect(sql).toMatch(
       /CREATE\s+UNIQUE\s+INDEX\s+"?tenant_members_did_unique"?[\s\S]*?\(\s*"?did"?\s*\)/i,
     )
+  })
+
+  it('PREFLIGHT-GUARDS a cross-tenant duplicate DID (RAISE EXCEPTION) BEFORE the data-copy', () => {
+    const sql = read0005()
+    // A guard that detects a DID present under >1 tenant and ABORTS loudly, so the
+    // legacy ambiguous (fail-CLOSED) state can't be silently collapsed into a single
+    // arbitrary tenant (fail-OPEN) by ON CONFLICT DO NOTHING against UNIQUE(did).
+    const guardRe =
+      /HAVING\s+count\(\*\)\s*>\s*1[\s\S]*?RAISE\s+EXCEPTION/i
+    expect(sql, 'a cross-tenant duplicate-DID preflight guard must be present').toMatch(guardRe)
+
+    // The guard (RAISE EXCEPTION) must run BEFORE the INSERT ... unnest data-copy,
+    // or a duplicate would already have been silently collapsed before the check.
+    const guardIdx = sql.search(/RAISE\s+EXCEPTION/i)
+    const copyIdx = sql.search(/INSERT\s+INTO\s+"?engine_tenant_members"?[\s\S]*?unnest\(/i)
+    expect(guardIdx, 'guard RAISE EXCEPTION must be present').toBeGreaterThanOrEqual(0)
+    expect(copyIdx, 'data-copy INSERT must be present').toBeGreaterThanOrEqual(0)
+    expect(guardIdx).toBeLessThan(copyIdx)
   })
 })

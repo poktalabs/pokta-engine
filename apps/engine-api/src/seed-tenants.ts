@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import { listManifests } from '@godin-engine/workflows'
 import { listIntegrations } from '@godin-engine/integrations'
-import { addTenantMember } from './tenants'
+import { addTenantMember, MemberDidCollisionError } from './tenants'
 
 /**
  * Tenant registry SEED + validation (PR2 T8). Idempotent: an `ON CONFLICT` upsert
@@ -140,6 +140,37 @@ export function validateSeeds(seeds: TenantSeed[], manifestIds: string[] = listM
 }
 
 /**
+ * Pre-validate the FULL set of member DIDs that `seedTenants` is about to bind —
+ * the static seed `members` UNION the env DIDs (`${secretPrefix}_MEMBER_DIDS`) per
+ * tenant — for a cross-tenant duplicate BEFORE any row is written. The membership
+ * table's `UNIQUE(did)` makes a cross-tenant double-bind a hard error; without this
+ * gate, `seedTenants`' per-DID `addTenantMember` would throw MID-LOOP, AFTER the
+ * colliding tenant's row was already upserted — a partially-applied seed / hard
+ * deploy abort. Throwing ONE aggregated error here keeps the seed all-or-nothing:
+ * a shared DID fails the deploy fast, names the DID and BOTH tenants, and writes
+ * nothing. Resolution is unchanged for any valid (collision-free) set.
+ */
+export function validateMemberDids(
+  seeds: TenantSeed[],
+  envDids: (secretPrefix: string | null) => string[] = envMemberDids,
+): void {
+  const owner = new Map<string, string>() // did → first tenant that claimed it
+  for (const t of seeds) {
+    const dids = unionMemberDids(t.members, envDids(t.secretPrefix))
+    for (const did of dids) {
+      const prior = owner.get(did)
+      if (prior && prior !== t.tenantId) {
+        throw new Error(
+          `member DID '${did}' is bound to more than one tenant ('${prior}' and '${t.tenantId}'); ` +
+            `a DID may belong to exactly one tenant (UNIQUE(did)) — reconcile the seed/env before deploying`,
+        )
+      }
+      owner.set(did, t.tenantId)
+    }
+  }
+}
+
+/**
  * Seed (idempotent upsert) the validated tenants into engine_tenants. Re-running
  * keeps config-managed columns in sync (name/status/branding/allow-list/prefix)
  * while bumping `updated_at`. `created_at` is untouched.
@@ -156,6 +187,9 @@ export function validateSeeds(seeds: TenantSeed[], manifestIds: string[] = listM
  */
 export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: TenantSeed[] = TENANT_SEEDS): Promise<void> {
   validateSeeds(seeds)
+  // Reject a cross-tenant duplicate DID BEFORE any row write so the seed is
+  // all-or-nothing (never a partial state on a mid-loop UNIQUE(did) collision).
+  validateMemberDids(seeds)
   for (const t of seeds) {
     await db
       .insert(schema.engineTenants)
@@ -188,7 +222,22 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
     // NOTHING insert tagged source='seed'.
     const memberDids = unionMemberDids(t.members, envMemberDids(t.secretPrefix))
     for (const did of memberDids) {
-      await addTenantMember(t.tenantId, did, db, 'seed')
+      try {
+        await addTenantMember(t.tenantId, did, db, 'seed')
+      } catch (e) {
+        // validateMemberDids should have caught any cross-tenant duplicate above;
+        // this is a belt-and-suspenders map of a UNIQUE(did) violation (e.g. a row
+        // bound out-of-band to another tenant since validation) to an actionable,
+        // DID-naming seed error rather than a raw driver error.
+        if (e instanceof MemberDidCollisionError) {
+          throw new Error(
+            `seed: member DID '${did}' (tenant '${t.tenantId}') is already bound to another tenant; ` +
+              `reconcile membership before re-seeding`,
+            { cause: e },
+          )
+        }
+        throw e
+      }
     }
   }
 }
