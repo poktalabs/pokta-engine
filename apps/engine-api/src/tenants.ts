@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import { listManifests } from '@godin-engine/workflows'
 import type { TenantView, TenantStatus } from '@godin-engine/contract'
@@ -78,28 +78,103 @@ export async function getTenant(
 
 /**
  * findTenantByMember(did) — resolve the tenant a Privy principal acts as: the
- * (unique) tenant whose `members[]` contains this DID. NOT cached by DID (the
- * membership index is the cheap path, and DID→tenant must reflect membership
- * edits promptly). Returns:
- *   - the row when exactly ONE tenant lists the DID,
+ * (unique) tenant whose `engine_tenant_members` carries this DID. NOT cached by DID
+ * (the membership read is cheap, and DID→tenant must reflect membership edits
+ * promptly). The `UNIQUE(did)` guard makes the >1 case structurally unwritable, but
+ * the ambiguous branch is KEPT as defense-in-depth (an out-of-band write that
+ * somehow violated the guard still fails closed rather than guessing a tenant).
+ * Returns:
+ *   - the joined tenant row when exactly ONE membership row carries the DID,
  *   - `undefined` when NONE do, or
- *   - `{ ambiguous: true }` when MORE THAN ONE does (a misconfiguration → the
- *     caller fails closed with TENANT_UNKNOWN rather than guessing a tenant).
+ *   - `{ ambiguous: true }` when MORE THAN ONE does (→ caller fails closed).
  */
 export async function findTenantByMember(
   did: string,
   db: DbLike = defaultDb,
 ): Promise<TenantRow | undefined | { ambiguous: true }> {
   if (!did) return undefined
-  // `members @> ARRAY[did]` — array-contains, served by tenants_members_idx.
+  // Join the membership row to its tenant; UNIQUE(did) → at most one. limit(2) keeps
+  // the ambiguous-detection defense even though >1 should be unwritable.
   const rows = (await db
-    .select()
-    .from(schema.engineTenants)
-    .where(sql`${schema.engineTenants.members} @> ARRAY[${did}]::text[]`)
-    .limit(2)) as TenantRow[]
-  if (rows.length === 0) return undefined
+    .select({ tenant: schema.engineTenants })
+    .from(schema.engineTenantMembers)
+    .innerJoin(
+      schema.engineTenants,
+      eq(schema.engineTenantMembers.tenantId, schema.engineTenants.tenantId),
+    )
+    .where(eq(schema.engineTenantMembers.did, did))
+    .limit(2)) as Array<{ tenant: TenantRow }>
+  if (rows.length === 0 || !rows[0]) return undefined
   if (rows.length > 1) return { ambiguous: true }
-  return rows[0]
+  return rows[0].tenant
+}
+
+/**
+ * A typed outcome distinguishing a member already bound to ANOTHER tenant (the
+ * `UNIQUE(did)` collision) from a clean insert. Thrown by `addTenantMember` so a
+ * caller (Wave 1 claim) can map a cross-tenant double-bind to a collision instead
+ * of a generic DB error.
+ */
+export class MemberDidCollisionError extends Error {
+  constructor(public readonly did: string) {
+    super(`did '${did}' is already a member of another tenant`)
+    this.name = 'MemberDidCollisionError'
+  }
+}
+
+/** True iff a thrown DB error is the unique-violation on `tenant_members_did_unique`. */
+function isDidUniqueViolation(e: unknown): boolean {
+  const err = e as { code?: string; constraint?: string; constraint_name?: string; message?: string }
+  if (err?.code === '23505') {
+    const c = err.constraint ?? err.constraint_name ?? ''
+    if (c === 'tenant_members_did_unique') return true
+    // Some drivers surface the constraint only in the message.
+    if (!c && typeof err.message === 'string') return err.message.includes('tenant_members_did_unique')
+    return c === 'tenant_members_did_unique'
+  }
+  return false
+}
+
+/**
+ * addTenantMember(tenantId, did, db, source?) — bind a DID to a tenant, INSERT-ONLY.
+ * `ON CONFLICT (tenant_id, did) DO NOTHING` makes re-adding the SAME (tenant, did)
+ * an idempotent no-op. A `UNIQUE(did)` violation (the DID is already a member of
+ * ANOTHER tenant) surfaces as a typed `MemberDidCollisionError` so the caller can
+ * map it to a collision; any other DB error propagates unchanged.
+ */
+export async function addTenantMember(
+  tenantId: string,
+  did: string,
+  db: DbLike = defaultDb,
+  source: string | null = null,
+): Promise<void> {
+  try {
+    await db
+      .insert(schema.engineTenantMembers)
+      .values({ tenantId, did, source })
+      .onConflictDoNothing({
+        target: [schema.engineTenantMembers.tenantId, schema.engineTenantMembers.did],
+      })
+  } catch (e) {
+    if (isDidUniqueViolation(e)) throw new MemberDidCollisionError(did)
+    throw e
+  }
+}
+
+/** removeTenantMember(tenantId, did, db) — delete the membership row (idempotent). */
+export async function removeTenantMember(
+  tenantId: string,
+  did: string,
+  db: DbLike = defaultDb,
+): Promise<void> {
+  await db
+    .delete(schema.engineTenantMembers)
+    .where(
+      and(
+        eq(schema.engineTenantMembers.tenantId, tenantId),
+        eq(schema.engineTenantMembers.did, did),
+      ),
+    )
 }
 
 /** True iff this tenant row may resolve/dispatch (only `'active'`). */

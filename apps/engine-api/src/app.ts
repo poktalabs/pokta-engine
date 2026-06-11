@@ -164,6 +164,14 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
     const consumer = c.get('consumer')
     const resolved = await resolveTenant(consumer)
     if (!resolved.ok) return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    // Confused-deputy guard (parity with scopedTenantId / the data routes): a privy
+    // principal whose non-empty consumer.id disagrees with the membership-resolved
+    // tenant fails closed, so a post-claim /tenants/me can never succeed while the
+    // later scoped data calls (keyed off the resolved tenant) would fail.
+    const tenantId = resolved.tenant.tenantId
+    if (consumer.mode === 'privy' && consumer.id && consumer.id !== tenantId) {
+      return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
+    }
     const view = toTenantView(resolved.tenant, allowedWorkflowsFor(resolved.tenant))
     return c.json(view)
   })

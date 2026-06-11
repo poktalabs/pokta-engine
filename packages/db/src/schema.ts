@@ -119,9 +119,10 @@ export const engineWorkflowState = pgTable(
  *     filters list surfaces by it and gates dispatch to it (a disallowed id is a
  *     404 SKILL_NOT_FOUND — anti-enumeration). Every id MUST exist in the workflow
  *     registry (validated on seed/save).
- *   - `members` — the Privy DIDs allowed to act as this tenant. A `mode==='privy'`
- *     principal resolves to the (unique) tenant whose `members[]` contains its DID;
- *     none → TENANT_UNKNOWN, multiple → ambiguous → TENANT_UNKNOWN.
+ *   - membership — the Privy DIDs allowed to act as this tenant live in the
+ *     `engine_tenant_members` table (NOT a column here). A `mode==='privy'`
+ *     principal resolves to the (unique) tenant whose membership row carries its DID
+ *     (`UNIQUE(did)` makes that at most one); none → TENANT_UNKNOWN.
  *   - `secretPrefix` — ops-owned env-var prefix the worker uses to read this
  *     tenant's provider secrets (e.g. `MIPASE` → `MIPASE_SHOPIFY_*`). Charset
  *     `^[A-Z][A-Z0-9_]*$`, UNIQUE across tenants (validated on seed/save).
@@ -140,13 +141,11 @@ export const engineTenants = pgTable(
     locale: text('locale').notNull(), // es-MX | en — DISPLAY only
     branding: jsonb('branding').notNull(), // typed vs TenantView.branding
     allowedWorkflows: text('allowed_workflows').array().notNull().default(sql`'{}'`),
-    members: text('members').array().notNull().default(sql`'{}'`), // allowed Privy DIDs
     secretPrefix: text('secret_prefix'), // ops-owned; ^[A-Z][A-Z0-9_]*$ + UNIQUE
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('tenants_members_idx').on(t.members),
     // secret_prefix UNIQUE at the DB (plan §4 + the column comment). Uniqueness was
     // previously enforced ONLY in validateSeeds() over the in-memory seed array; an
     // out-of-band INSERT/UPDATE could create two ACTIVE tenants sharing a prefix and
@@ -154,6 +153,39 @@ export const engineTenants = pgTable(
     // MIPASE_SHOPIFY_ACCESS_TOKEN). The DB constraint makes that un-writable.
     // Postgres treats multiple NULLs as distinct, so the nullable column is fine.
     uniqueIndex('tenants_secret_prefix_unique').on(t.secretPrefix),
+  ],
+)
+
+/**
+ * Tenant membership (Wave 0 / D9) — the Privy DIDs allowed to act as a tenant.
+ * Replaces the former `engine_tenants.members[]` array column with a real
+ * `(tenant_id, did)` table so membership is queryable, auditable, and — crucially —
+ * structurally constrained:
+ *
+ *   - `PK(tenant_id, did)` — a DID is listed at most once per tenant (idempotent add).
+ *   - `UNIQUE(did)` (`tenant_members_did_unique`) — the GLOBAL DID-uniqueness guard:
+ *     a DID belongs to AT MOST ONE tenant. This makes `findTenantByMember(did)`
+ *     resolve to a single tenant structurally (no ambiguous >1 case is writable) and
+ *     prevents a DID landing in two tenants (which would fail `resolveTenant` closed
+ *     and lock a real user out).
+ *   - `source` — provenance tag (e.g. 'seed') for ops/audit; not authz.
+ *
+ * FK → engine_tenants(tenant_id) ON DELETE CASCADE: dropping a tenant drops its
+ * membership rows.
+ */
+export const engineTenantMembers = pgTable(
+  'engine_tenant_members',
+  {
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => engineTenants.tenantId, { onDelete: 'cascade' }),
+    did: text('did').notNull(),
+    source: text('source'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.did] }),
+    uniqueIndex('tenant_members_did_unique').on(t.did),
   ],
 )
 

@@ -36,14 +36,18 @@ vi.mock('drizzle-orm', () => ({
 }))
 
 // ── @godin-engine/db: schema columns tagged so eq-markers reveal the queried column ──
-// The registry references schema.engineTenants.<col>. The real `db` is irrelevant —
-// getTenant / findTenantByMember / resolveTenant all accept db as an argument.
+// The registry references schema.engineTenants.<col> and schema.engineTenantMembers.<col>.
+// The real `db` is irrelevant — getTenant / findTenantByMember / resolveTenant all
+// accept db as an argument.
 vi.mock('@godin-engine/db', () => ({
   db: {},
   schema: {
     engineTenants: {
       tenantId: 'T.tenant_id',
-      members: 'T.members',
+    },
+    engineTenantMembers: {
+      tenantId: 'M.tenant_id',
+      did: 'M.did',
     },
   },
 }))
@@ -84,6 +88,13 @@ function eqId(where: unknown): string | undefined {
   return undefined
 }
 
+/** Pull the queried DID out of an `eq(M.did, did)` where-marker. */
+function didFromWhere(where: unknown): string | undefined {
+  const w = where as Marker
+  if (w?.eq && w.eq[0] === 'M.did') return w.eq[1] as string
+  return undefined
+}
+
 function makeDb(rowsById: Record<string, ReturnType<typeof row>>) {
   let findFirstCalls = 0
   let selectCalls = 0
@@ -97,18 +108,21 @@ function makeDb(rowsById: Record<string, ReturnType<typeof row>>) {
         },
       },
     },
-    // findTenantByMember: db.select().from(T).where(sql`members @> ARRAY[did]`).limit(2)
+    // findTenantByMember now joins engine_tenant_members → engine_tenants:
+    //   db.select({tenant:T}).from(M).innerJoin(T, eq(M.tenant_id, T.tenant_id))
+    //     .where(eq(M.did, did)).limit(2)
+    // The fixture is the row factory's `members` (a list of DIDs per tenant); the
+    // fake resolves the DID to the owning tenant row(s) and projects { tenant }.
     select: () => ({
       from: () => ({
-        where: (w: unknown) => {
-          selectCalls++
-          // pull the DID out of the sql-marker template vals. The registry builds
-          // `sql\`${members} @> ARRAY[${did}]::text[]\`` so vals === [membersCol, did].
-          const vals = (w as { sql?: { vals: unknown[] } })?.sql?.vals ?? []
-          const did = vals.find((v) => typeof v === 'string' && v.startsWith('did:')) as string
-          const matches = Object.values(rowsById).filter((r) => r.members.includes(did))
-          return { limit: async (n: number) => matches.slice(0, n) }
-        },
+        innerJoin: () => ({
+          where: (w: unknown) => {
+            selectCalls++
+            const did = didFromWhere(w)
+            const matches = Object.values(rowsById).filter((r) => did != null && r.members.includes(did))
+            return { limit: async (n: number) => matches.slice(0, n).map((tenant) => ({ tenant })) }
+          },
+        }),
       }),
     }),
   }

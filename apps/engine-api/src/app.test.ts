@@ -40,23 +40,44 @@ const REGISTRY: Row[] = [
 ]
 
 vi.mock('@godin-engine/db', () => {
-  // Unified select chain. `.where(pred)` returns BOTH:
-  //   - `.orderBy().limit()` → runs list (scoped-db.listRuns), and
-  //   - `.limit(n)`          → findTenantByMember (no orderBy), resolving the
-  //                            registry rows whose members[] contains the DID.
-  // The drizzle `sql` membership clause is encoded as { member: did }.
+  // Pull the queried DID out of an `eq(M.did, did)` where-marker.
+  const didFrom = (pred: unknown): string | undefined => {
+    const p = pred as { eq?: [string, string] }
+    return p?.eq?.[0] === 'M.did' ? p.eq[1] : undefined
+  }
+  // Unified select chain:
+  //   - `.from(R).where(pred).orderBy().limit()`        → runs list (scoped-db.listRuns)
+  //   - `.from(M).innerJoin(T,..).where(eq(M.did,did)).limit(n)` → findTenantByMember,
+  //         resolving the membership rows whose did matches, projected as { tenant }.
+  //   - `.from(A).innerJoin(R,..).where().orderBy().limit()`     → approvals join.
+  // Wave 0: membership moved to engine_tenant_members; the fixture is each REGISTRY
+  // row's `members` DID list.
   const runsAndMembers = {
     from: () => ({
-      innerJoin: () => ({ where: () => ({ orderBy: () => ({ limit: async () => state.approvals.map((r) => ({ approval: r })) }) }) }),
-      where: (pred: { member?: string }) => ({
+      innerJoin: () => ({
+        where: (pred: unknown) => ({
+          // approvals join: orderBy().limit()
+          orderBy: () => ({ limit: async () => state.approvals.map((r) => ({ approval: r })) }),
+          // findTenantByMember: limit(n) directly off where
+          limit: async (_n: number) => {
+            const did = didFrom(pred)
+            return REGISTRY.filter((t) => did != null && (t.members as string[]).includes(did)).map(
+              (tenant) => ({ tenant }),
+            )
+          },
+        }),
+      }),
+      where: () => ({
         orderBy: () => ({ limit: async () => state.runs }),
-        limit: async (_n: number) =>
-          REGISTRY.filter((t) => pred?.member != null && (t.members as string[]).includes(pred.member)),
       }),
     }),
   }
   const db = {
-    select: (proj?: unknown) => (proj ? { from: () => ({ innerJoin: () => ({ where: () => ({ orderBy: () => ({ limit: async () => state.approvals.map((r) => ({ approval: r })) }) }) }) }) } : runsAndMembers),
+    // One chain handles all three reads: the innerJoin branch serves BOTH the
+    // approvals join (where→orderBy→limit) and findTenantByMember (where→limit);
+    // the plain where branch serves the runs list. Both projected (select({...}))
+    // and unprojected (select()) calls route here.
+    select: (_proj?: unknown) => runsAndMembers,
     insert: () => ({ values: async (v: Row) => { state.inserted.push(v) } }),
     update: () => ({ set: () => ({ where: () => ({ returning: async () => [] }) }) }),
     transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -83,7 +104,8 @@ vi.mock('@godin-engine/db', () => {
     schema: {
       engineRuns: { runId: 'run_id', consumerId: 'consumer_id', status: 'status', createdAt: 'created_at' },
       engineApprovals: { approvalId: 'approval_id', sourceRunId: 'source_run_id', state: 'state', approver: 'approver', createdAt: 'created_at' },
-      engineTenants: { tenantId: 'tenant_id', members: 'members' },
+      engineTenants: { tenantId: 'tenant_id' },
+      engineTenantMembers: { tenantId: 'M.tenant_id', did: 'M.did' },
     },
   }
 })
@@ -92,12 +114,7 @@ vi.mock('drizzle-orm', () => ({
   and: (...x: unknown[]) => ({ and: x }),
   eq: (a: unknown, b: unknown) => ({ eq: [a, b] }),
   desc: (x: unknown) => x,
-  // `${members} @> ARRAY[${did}]::text[]` — capture the DID string value (the
-  // members column interpolates to the 'members' sentinel) as { member: did }.
-  sql: Object.assign((_s: TemplateStringsArray, ...vals: unknown[]) => {
-    const did = vals.find((v) => typeof v === 'string' && v !== 'members') as string | undefined
-    return { member: did }
-  }, { raw: () => ({}) }),
+  sql: Object.assign((_s: TemplateStringsArray, ..._vals: unknown[]) => ({}), { raw: () => ({}) }),
 }))
 
 const { buildApp } = await import('./app')

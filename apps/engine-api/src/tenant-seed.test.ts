@@ -18,28 +18,56 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 // ── Mock the db client so importing seed-tenants does not require Postgres ────
-// Capture every upsert (the INSERTed values) AND the onConflictDoUpdate SET so we
-// can prove (a) validation gates the write path and (b) the member-DID merge is
-// ADDITIVE on both the insert side and the conflict side (PR2b B1 / SEED-DID).
+// Wave 0: membership moved from engine_tenants.members[] into engine_tenant_members.
+// seedTenants now (a) upserts the tenant ROW (no members column) then (b) binds each
+// member DID via addTenantMember → db.insert(engineTenantMembers).values({tenantId,
+// did, source}).onConflictDoNothing(). The mock captures BOTH so we can prove
+// validation gates the row write AND that env DIDs bind ADDITIVELY (insert-only).
 type Row = Record<string, unknown>
-const writes: { upserts: Row[]; conflicts: Row[] } = { upserts: [], conflicts: [] }
+const writes: {
+  upserts: Row[] // engine_tenants row inserts
+  conflicts: Row[] // engine_tenants onConflictDoUpdate SET
+  memberBinds: Array<{ tenantId: string; did: string; source: unknown }> // engine_tenant_members inserts
+} = { upserts: [], conflicts: [], memberBinds: [] }
 
 vi.mock('@godin-engine/db', () => {
-  const insert = () => ({
-    values: (v: Row) => {
-      writes.upserts.push(v)
+  // The drizzle table marker passed to db.insert(<table>) tells the mock WHICH
+  // table is being written (the schema mock tags each).
+  const insert = (table: { __table?: string } | undefined) => {
+    if (table?.__table === 'engine_tenant_members') {
       return {
-        onConflictDoUpdate: async (cfg: { set?: Row }) => {
-          writes.conflicts.push(cfg?.set ?? {})
-          return undefined
-        },
+        values: (v: Row) => ({
+          // addTenantMember uses onConflictDoNothing (insert-only).
+          onConflictDoNothing: async () => {
+            writes.memberBinds.push({
+              tenantId: v.tenantId as string,
+              did: v.did as string,
+              source: v.source,
+            })
+            return undefined
+          },
+        }),
       }
-    },
-  })
-  // `members` column marker is referenced by the ADDITIVE union SQL on conflict.
+    }
+    // engine_tenants row upsert.
+    return {
+      values: (v: Row) => {
+        writes.upserts.push(v)
+        return {
+          onConflictDoUpdate: async (cfg: { set?: Row }) => {
+            writes.conflicts.push(cfg?.set ?? {})
+            return undefined
+          },
+        }
+      },
+    }
+  }
   return {
     db: { insert },
-    schema: { engineTenants: { tenantId: 'tenant_id', members: 'members' } },
+    schema: {
+      engineTenants: { __table: 'engine_tenants', tenantId: 'tenant_id' },
+      engineTenantMembers: { __table: 'engine_tenant_members', tenantId: 'M.tenant_id', did: 'M.did' },
+    },
   }
 })
 
@@ -217,14 +245,15 @@ describe('SEED — seedTenants gates the write path with validation', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SEED-DID (B) — env-seeded member DIDs are ADDITIVE (PR2b B1 / §4 / §6).
+// SEED-DID (B) — env-seeded member DIDs are ADDITIVE (PR2b B1 / §4 / §6 / Wave 0 D9).
 //
 // Member DIDs are ops-owned and read from `${secretPrefix}_MEMBER_DIDS` at seed
-// time. The merge into `engine_tenants.members[]` is strictly additive (union,
-// dedupe): the static seed `members` and the existing on-conflict column are both
-// preserved; an unset/blank env is a NO-OP (never a wipe → never a deploy-time
-// lockout). NO DID literal lives in source — these tests inject DIDs through
-// process.env exactly as Railway/.env.local would, and clean them up after.
+// time. Membership now lives in engine_tenant_members (NOT a column): each DID —
+// the static seed `members` UNION the env DIDs, deduped — is bound via
+// addTenantMember insert-only (ON CONFLICT (tenant_id, did) DO NOTHING). An
+// unset/blank env binds nothing (NO-OP, never a wipe → never a deploy-time lockout).
+// NO DID literal lives in source — these tests inject DIDs through process.env
+// exactly as Railway/.env.local would, and clean them up after.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Restore env keys this suite mutates so cases never leak DIDs into one another. */
@@ -271,15 +300,21 @@ describe('SEED-DID — envMemberDids parses ${secretPrefix}_MEMBER_DIDS', () => 
   })
 })
 
-describe('SEED-DID — seedTenants merges env DIDs into the INSERTed members (additive, union)', () => {
+/** All member DIDs bound for a tenant (engine_tenant_members inserts), in order. */
+function boundDids(tenantId: string): string[] {
+  return writes.memberBinds.filter((b) => b.tenantId === tenantId).map((b) => b.did)
+}
+
+describe('SEED-DID — seedTenants binds env DIDs into engine_tenant_members (additive, union, insert-only)', () => {
   beforeEach(() => {
     clearMemberDidEnv()
     writes.upserts.length = 0
     writes.conflicts.length = 0
+    writes.memberBinds.length = 0
   })
   afterEach(clearMemberDidEnv)
 
-  it('unions env DIDs into the insert members, deduped, with the static seed members preserved', async () => {
+  it('binds the static seed members UNION env DIDs, deduped, static-first', async () => {
     process.env.MIPASE_MEMBER_DIDS = 'did:privy:env1,did:privy:env2,did:privy:seed'
     await seedTenants(undefined, [
       seed({
@@ -290,44 +325,45 @@ describe('SEED-DID — seedTenants merges env DIDs into the INSERTed members (ad
         allowedWorkflows: [],
       }),
     ])
-    const inserted = writes.upserts[0] as { members: string[] }
     // static seed member first, then the NEW env DIDs; the overlapping 'seed' is not duplicated.
-    expect(inserted.members).toEqual(['did:privy:seed', 'did:privy:env1', 'did:privy:env2'])
-    // every static seed member is preserved (additive, never replaced).
-    expect(inserted.members).toContain('did:privy:seed')
+    expect(boundDids('mi-pase')).toEqual(['did:privy:seed', 'did:privy:env1', 'did:privy:env2'])
+    // the tenant ROW insert no longer carries a members column.
+    expect((writes.upserts[0] as Record<string, unknown>).members).toBeUndefined()
   })
 
-  it('UNSET env → insert members are exactly the static seed members (no-op, not a wipe)', async () => {
+  it('binds with source=seed via insert-only (ON CONFLICT DO NOTHING) — never wipes', async () => {
+    process.env.MIPASE_MEMBER_DIDS = 'did:privy:one'
+    await seedTenants(undefined, [
+      seed({ tenantId: 'mi-pase', secretPrefix: 'MIPASE', members: [], allowedWorkflows: [] }),
+    ])
+    expect(writes.memberBinds).toHaveLength(1)
+    expect(writes.memberBinds[0]).toEqual({ tenantId: 'mi-pase', did: 'did:privy:one', source: 'seed' })
+  })
+
+  it('UNSET env → binds exactly the static seed members (no-op, not a wipe)', async () => {
     expect(process.env.MIPASE_MEMBER_DIDS).toBeUndefined()
     await seedTenants(undefined, [
       seed({ tenantId: 'mi-pase', secretPrefix: 'MIPASE', members: ['did:privy:existing'], allowedWorkflows: [] }),
     ])
-    const inserted = writes.upserts[0] as { members: string[] }
-    expect(inserted.members).toEqual(['did:privy:existing'])
+    expect(boundDids('mi-pase')).toEqual(['did:privy:existing'])
   })
 
-  it('BLANK env → still a no-op (members unchanged, never emptied)', async () => {
+  it('BLANK env → still binds only the static seed members (never emptied)', async () => {
     process.env.MIPASE_MEMBER_DIDS = '   '
     await seedTenants(undefined, [
       seed({ tenantId: 'mi-pase', secretPrefix: 'MIPASE', members: ['did:privy:keep'], allowedWorkflows: [] }),
     ])
-    const inserted = writes.upserts[0] as { members: string[] }
-    expect(inserted.members).toEqual(['did:privy:keep'])
+    expect(boundDids('mi-pase')).toEqual(['did:privy:keep'])
   })
 
-  it('the on-conflict SET keeps an ADDITIVE members union keyed off the existing column (never overwrites with a bare list)', async () => {
+  it('the tenant-row onConflict SET no longer touches a members column (membership is its own table)', async () => {
     process.env.MIPASE_MEMBER_DIDS = 'did:privy:env1'
     await seedTenants(undefined, [
       seed({ tenantId: 'mi-pase', secretPrefix: 'MIPASE', members: [], allowedWorkflows: [] }),
     ])
     const set = writes.conflicts[0] as { members?: unknown }
-    // The conflict branch must NOT set members to a plain array (that would wipe
-    // out-of-band DIDs on the existing row); it must be a SQL union expression.
-    expect(Array.isArray(set.members)).toBe(false)
-    expect(set.members).toBeDefined()
-    // It references the EXISTING members column (the 'members' marker) so the
-    // union preserves rows already in the table.
-    expect(JSON.stringify(set.members)).toContain('members')
+    // No members column on engine_tenants anymore → the conflict SET must not carry one.
+    expect(set.members).toBeUndefined()
   })
 })
 
@@ -336,36 +372,34 @@ describe('SEED-DID — a seeded DID flows to membership-based tenant resolution 
     clearMemberDidEnv()
     writes.upserts.length = 0
     writes.conflicts.length = 0
+    writes.memberBinds.length = 0
   })
   afterEach(clearMemberDidEnv)
 
-  it('the env DID lands in mi-pase members[] (the column findTenantByMember/resolveTenant query), and mi-pase seeds ACTIVE', async () => {
+  it('the env DID is bound to mi-pase membership (what findTenantByMember/resolveTenant query), and mi-pase seeds ACTIVE', async () => {
     process.env.MIPASE_MEMBER_DIDS = 'did:privy:owner'
     // Seed the REAL shipped set so the active/pending statuses are the production ones.
     await seedTenants(undefined, TENANT_SEEDS)
-    const byId = Object.fromEntries(
-      writes.upserts.map((u) => [(u as { tenantId: string }).tenantId, u as { members: string[]; status: string }]),
+    const statusById = Object.fromEntries(
+      writes.upserts.map((u) => [(u as { tenantId: string }).tenantId, (u as { status: string }).status]),
     )
-    // mi-pase is the active tenant; its members[] now contains the seeded DID, which
-    // is exactly the array `findTenantByMember(did)` matches and `resolveTenant`
-    // (privy mode) status-gates on. A DID in mi-pase's members[] therefore resolves
-    // to the ACTIVE mi-pase tenant (resolveTenant's privy chain is unit-proven in
-    // scoped-db.test.ts against this same members[] semantics).
-    expect(byId['mi-pase']?.status).toBe('active')
-    expect(byId['mi-pase']?.members).toContain('did:privy:owner')
-    // A DID seeded under no tenant prefix never lands in any members[] → it would
-    // resolve to TENANT_UNKNOWN. vino got no DID here, so its members stay empty.
-    expect(byId['vino']?.members).not.toContain('did:privy:owner')
-    expect(byId['vino']?.members).toEqual([])
+    // mi-pase is the active tenant; the seeded DID is now bound in its membership
+    // table — exactly the rows findTenantByMember(did) joins and resolveTenant
+    // (privy mode) status-gates on. A DID bound to mi-pase therefore resolves to the
+    // ACTIVE mi-pase tenant (resolveTenant's privy chain is unit-proven in
+    // tenants.test.ts against this same membership semantics).
+    expect(statusById['mi-pase']).toBe('active')
+    expect(boundDids('mi-pase')).toContain('did:privy:owner')
+    // A DID seeded under no tenant prefix is bound nowhere → it would resolve to
+    // TENANT_UNKNOWN. vino got no DID here, so it has no membership bind.
+    expect(boundDids('vino')).not.toContain('did:privy:owner')
+    expect(boundDids('vino')).toEqual([])
   })
 
-  it('a DID seeded to a DIFFERENT tenant does NOT appear in mi-pase members[] (no cross-tenant leak)', async () => {
+  it('a DID seeded to a DIFFERENT tenant is bound only to that tenant (no cross-tenant leak)', async () => {
     process.env.VINO_MEMBER_DIDS = 'did:privy:vino-only'
     await seedTenants(undefined, TENANT_SEEDS)
-    const byId = Object.fromEntries(
-      writes.upserts.map((u) => [(u as { tenantId: string }).tenantId, u as { members: string[] }]),
-    )
-    expect(byId['vino']?.members).toContain('did:privy:vino-only')
-    expect(byId['mi-pase']?.members).not.toContain('did:privy:vino-only')
+    expect(boundDids('vino')).toContain('did:privy:vino-only')
+    expect(boundDids('mi-pase')).not.toContain('did:privy:vino-only')
   })
 })

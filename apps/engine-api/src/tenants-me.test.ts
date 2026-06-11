@@ -78,11 +78,14 @@ vi.mock('@godin-engine/queue', () => ({
 /**
  * The db mock services exactly the two reads the registry performs:
  *   - getTenant(id)         → db.query.engineTenants.findFirst({ where: eq(tenant_id, id) })
- *   - findTenantByMember(d) → db.select().from(engineTenants).where(sql`members @> ...`).limit(2)
+ *   - findTenantByMember(d) → db.select({tenant:T}).from(engine_tenant_members)
+ *                               .innerJoin(T, eq(M.tenant_id, T.tenant_id))
+ *                               .where(eq(M.did, did)).limit(2)  → [{ tenant }]
  *
- * The drizzle-orm mock encodes `eq(tenant_id, id)` as { eq: ['tenant_id', id] } and
- * the membership `sql` clause as { member: did }, so the mock can resolve the right
- * row(s) without a real Postgres.
+ * Membership now lives in engine_tenant_members (Wave 0). The fixture is each tenant
+ * row's `members` DID list; the mock resolves a queried DID to the owning tenant
+ * row(s) and projects { tenant }. The drizzle-orm mock encodes `eq(col, val)` as
+ * { eq: [col, val] }, so the mock reads the queried DID off the where-marker.
  */
 vi.mock('@godin-engine/db', () => {
   const findFirst = async ({ where }: { where: { eq?: [string, string] } }) => {
@@ -90,16 +93,25 @@ vi.mock('@godin-engine/db', () => {
     if (wantId === undefined) return undefined
     return store.tenants.find((t) => t.tenantId === wantId)
   }
+  // Pull the queried DID out of an `eq(M.did, did)` where-marker.
+  const didFrom = (pred: { eq?: [string, string] }): string | undefined =>
+    pred?.eq?.[0] === 'M.did' ? pred.eq[1] : undefined
   const db = {
     query: {
       engineTenants: { findFirst },
     },
-    // findTenantByMember: select().from().where({member}).limit(n)
+    // findTenantByMember: select().from(M).innerJoin(T,...).where(eq(M.did,did)).limit(n)
     select: () => ({
       from: () => ({
-        where: (pred: { member?: string }) => ({
-          limit: async (_n: number) =>
-            store.tenants.filter((t) => pred?.member != null && t.members.includes(pred.member)),
+        innerJoin: () => ({
+          where: (pred: { eq?: [string, string] }) => ({
+            limit: async (_n: number) => {
+              const did = didFrom(pred)
+              return store.tenants
+                .filter((t) => did != null && t.members.includes(did))
+                .map((tenant) => ({ tenant }))
+            },
+          }),
         }),
       }),
     }),
@@ -107,7 +119,8 @@ vi.mock('@godin-engine/db', () => {
   return {
     db,
     schema: {
-      engineTenants: { tenantId: 'tenant_id', members: 'members' },
+      engineTenants: { tenantId: 'tenant_id' },
+      engineTenantMembers: { tenantId: 'M.tenant_id', did: 'M.did' },
     },
   }
 })
@@ -116,13 +129,7 @@ vi.mock('drizzle-orm', () => ({
   eq: (a: unknown, b: unknown) => ({ eq: [a, b] }),
   and: (...x: unknown[]) => ({ and: x }),
   desc: (x: unknown) => x,
-  // `${members} @> ARRAY[${did}]::text[]` — the interpolated values are
-  // [membersColumn, did]; the did is the string value (the column interpolates to
-  // the mocked 'members' sentinel). Capture the FIRST string value as the did.
-  sql: Object.assign((_s: TemplateStringsArray, ...vals: unknown[]) => {
-    const did = vals.find((v) => typeof v === 'string' && v !== 'members') as string | undefined
-    return { member: did }
-  }, {
+  sql: Object.assign((_s: TemplateStringsArray, ..._vals: unknown[]) => ({}), {
     raw: () => ({}),
   }),
 }))
@@ -305,5 +312,39 @@ describe('GET /v1/tenants/me — Privy membership resolution', () => {
     expect(res.status).toBe(403)
     const body = (await res.json()) as { error: { code: string } }
     expect(body.error.code).toBe('TENANT_UNKNOWN')
+  })
+
+  // ── Split-brain guard (Wave 0 step 6, Codex fold) ────────────────────────────
+  // /v1/tenants/me applies the SAME confused-deputy guard the data routes use: a
+  // privy principal whose non-empty consumer.id (from the legacy PRIVY_TENANT_MAP)
+  // DISAGREES with the membership-resolved tenant fails closed. Otherwise a
+  // post-claim /tenants/me could succeed while later scoped data calls (keyed off
+  // the resolved tenant) fail — a split brain.
+  it('a Privy DID whose PRIVY_TENANT_MAP consumer.id DISAGREES with the resolved tenant → 403 TENANT_UNKNOWN', async () => {
+    store.tenants = [MIPASE] // DID is mi-pase's member…
+    process.env.PRIVY_TENANT_MAP = 'did:privy:mipase-owner=other' // …but env maps it to 'other'.
+    const app = buildApp({
+      auth: { verifyPrivyToken: async () => ({ userId: 'did:privy:mipase-owner', appId: 'app1' }) },
+    })
+    const res = await app.request('/v1/tenants/me', {
+      headers: { Authorization: 'Bearer offline-token' },
+    })
+    expect(res.status).toBe(403)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('TENANT_UNKNOWN')
+  })
+
+  it('happy path still passes when PRIVY_TENANT_MAP AGREES with the resolved tenant → 200', async () => {
+    store.tenants = [MIPASE]
+    process.env.PRIVY_TENANT_MAP = 'did:privy:mipase-owner=mi-pase' // agrees → no split brain.
+    const app = buildApp({
+      auth: { verifyPrivyToken: async () => ({ userId: 'did:privy:mipase-owner', appId: 'app1' }) },
+    })
+    const res = await app.request('/v1/tenants/me', {
+      headers: { Authorization: 'Bearer offline-token' },
+    })
+    expect(res.status).toBe(200)
+    const view = (await res.json()) as { id: string }
+    expect(view.id).toBe('mi-pase')
   })
 })

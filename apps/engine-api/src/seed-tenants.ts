@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import { listManifests } from '@godin-engine/workflows'
 import { listIntegrations } from '@godin-engine/integrations'
+import { addTenantMember } from './tenants'
 
 /**
  * Tenant registry SEED + validation (PR2 T8). Idempotent: an `ON CONFLICT` upsert
@@ -57,7 +58,7 @@ export function envMemberDids(secretPrefix: string | null): string[] {
 }
 
 /** Union two DID lists, preserving order (a first, then new b entries), deduped. */
-function unionDids(a: string[], b: string[]): string[] {
+function unionMemberDids(a: string[], b: string[]): string[] {
   const seen = new Set(a)
   const out = [...a]
   for (const did of b) {
@@ -143,19 +144,19 @@ export function validateSeeds(seeds: TenantSeed[], manifestIds: string[] = listM
  * keeps config-managed columns in sync (name/status/branding/allow-list/prefix)
  * while bumping `updated_at`. `created_at` is untouched.
  *
- * MEMBER DIDs (PR2b B1) are ADDITIVE and never wiped:
- *   - the INSERTed `members` is the seed's static `members` UNION the env DIDs
- *     (`${secretPrefix}_MEMBER_DIDS`), deduped;
- *   - on CONFLICT we set `members` to the UNION of the EXISTING column and the
- *     env-derived insert values (`array(select distinct unnest(existing || excluded))`).
- *     So a re-deploy ADDS any new env DIDs while preserving DIDs added out-of-band
- *     — it can never wipe `members` (an empty/unset env is a no-op: the union with
- *     `excluded.members={}` returns the existing set unchanged).
+ * MEMBER DIDs (PR2b B1 / Wave 0 D9) are ADDITIVE and never wiped. Membership now
+ * lives in `engine_tenant_members` (NOT a column here): after upserting the tenant
+ * row, each DID — the static seed `t.members` UNION the env DIDs
+ * (`${secretPrefix}_MEMBER_DIDS`) — is bound via `addTenantMember(..., source='seed')`
+ * with INSERT-ONLY semantics (`ON CONFLICT (tenant_id, did) DO NOTHING`). So a
+ * re-deploy ADDS any new DIDs while preserving rows already present (incl. ones
+ * added out-of-band); an empty/unset env binds nothing (no wipe → no lockout). The
+ * `UNIQUE(did)` guard makes a cross-tenant double-bind a `MemberDidCollisionError`
+ * (surfaced loudly rather than silently mis-binding).
  */
 export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: TenantSeed[] = TENANT_SEEDS): Promise<void> {
   validateSeeds(seeds)
   for (const t of seeds) {
-    const members = unionDids(t.members, envMemberDids(t.secretPrefix))
     await db
       .insert(schema.engineTenants)
       .values({
@@ -166,7 +167,6 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
         locale: t.locale,
         branding: t.branding,
         allowedWorkflows: t.allowedWorkflows,
-        members,
         secretPrefix: t.secretPrefix,
       })
       .onConflictDoUpdate({
@@ -179,15 +179,17 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
           branding: t.branding,
           allowedWorkflows: t.allowedWorkflows,
           secretPrefix: t.secretPrefix,
-          // ADDITIVE union: keep every existing DID, add the env-derived ones.
-          members: sql`(
-            select coalesce(array(
-              select distinct unnest(${schema.engineTenants.members} || excluded.members)
-            ), '{}')
-          )`,
           updatedAt: sql`now()`,
         },
       })
+
+    // Bind member DIDs into the membership table (insert-only, additive). Static
+    // seed members UNION env DIDs, deduped; each is an idempotent ON CONFLICT DO
+    // NOTHING insert tagged source='seed'.
+    const memberDids = unionMemberDids(t.members, envMemberDids(t.secretPrefix))
+    for (const did of memberDids) {
+      await addTenantMember(t.tenantId, did, db, 'seed')
+    }
   }
 }
 

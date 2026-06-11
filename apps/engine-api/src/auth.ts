@@ -15,7 +15,7 @@ import { EngineError } from '@godin-engine/contract'
  *   BROWSER  — header `Authorization: Bearer <privyJwt>`. Verified with
  *              @privy-io/server-auth (NEVER hand-rolled JWT crypto). The verified
  *              Privy userId (DID) is the identity. The TENANT is resolved ONLY from
- *              membership (`engine_tenants.members[]` via resolveTenant →
+ *              membership (the `engine_tenant_members` table via resolveTenant →
  *              findTenantByMember) — the optional PRIVY_TENANT_MAP env is a legacy
  *              deploy seam, NOT a scope key: it merely seeds `consumer.id`, which
  *              the route layer asserts-agrees-or-rejects against the resolved tenant
