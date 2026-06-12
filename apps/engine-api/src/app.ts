@@ -11,17 +11,21 @@ import type {
   WorkspaceWorkflowsResponse,
   IntegrationListResponse,
   IntegrationStatus,
+  InviteView,
+  InviteListResponse,
 } from '@godin-engine/contract'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { consumerAuth, type AuthOptions, type Consumer } from './auth'
 import { forConsumer, resolveTenant, claimThrottle, CLAIM_THROTTLE_PER_DAY } from './scoped-db'
 import { allowedWorkflowsFor, toTenantView, type TenantRow } from './tenants'
-import { findInviteForEmails, claimInvite } from './invites'
+import { findInviteForEmails, claimInvite, addInvite, listInvites } from './invites'
+import { deprovisionInvite } from './deprovision-invite'
 import {
   buildDefaultPrivyEmailResolver,
   type ResolvePrivyEmails,
 } from './privy-user'
 import { isClaimNegCached, rememberClaimMiss } from './claim-neg-cache'
+import { validateInviteEmails } from './seed-tenants'
 import { cardsForTenant, familyMemberIds } from './workspace-cards'
 import { mountDemo } from './demo'
 import { mountDashboard } from './dashboard'
@@ -145,6 +149,88 @@ export interface BuildAppOptions {
  */
 const TENANT_UNKNOWN_MESSAGE = 'principal maps to no active tenant'
 
+/** Project a stored invite row into the minimal, honest admin InviteView. */
+function toInviteView(row: {
+  email: string
+  status: 'pending' | 'claimed' | 'revoked'
+  claimedByDid: string | null
+  claimedAt: Date | null
+}): InviteView {
+  return {
+    email: row.email,
+    status: row.status,
+    claimedByDid: row.claimedByDid,
+    claimedAt: row.claimedAt ? row.claimedAt.toISOString() : null,
+  }
+}
+
+/**
+ * Operator-gated admin invite management (Wave 3). Mounted under the SAME fail-closed
+ * operatorAuth() gate as /demo (see buildApp), so when OPERATOR_KEY is unset OR the
+ * X-Operator-Key header is wrong/missing every route 404s and never confirms a
+ * tenant/invite exists. NO raw db here — all DB goes through invites.ts (addInvite /
+ * listInvites) and deprovision-invite.ts (deprovisionInvite), keeping check:scoped green.
+ *
+ *   POST   /admin/tenants/:tenantId/invites  { email } → upsert a pending invite
+ *   GET    /admin/tenants/:tenantId/invites           → the tenant's invite roster
+ *   DELETE /admin/tenants/:tenantId/invites/:email     → revoke + remove the member
+ */
+function mountAdminInvites(app: Hono): void {
+  app.post('/admin/tenants/:tenantId/invites', async (c) => {
+    const tenantId = c.req.param('tenantId')
+    const body = (await c.req.json().catch(() => null)) as { email?: unknown } | null
+    const rawEmail = body?.email
+    if (typeof rawEmail !== 'string' || !rawEmail.trim()) {
+      return fail(c, new EngineError('ARGS_INVALID', 'body.email is required'))
+    }
+    const email = rawEmail.trim().toLowerCase()
+    try {
+      validateInviteEmails([email])
+    } catch {
+      return fail(c, new EngineError('ARGS_INVALID', 'body.email is not a valid email address'))
+    }
+
+    let outcome
+    try {
+      outcome = await addInvite(tenantId, email, db)
+    } catch (e) {
+      // A non-existent tenant trips the FK on insert — surface a clean 404, not a 500.
+      if (isForeignKeyViolation(e)) {
+        return fail(c, new EngineError('SKILL_NOT_FOUND', `tenant '${tenantId}' not found`))
+      }
+      throw e
+    }
+    // Email already ACTIVE for a DIFFERENT tenant → 409 (APPROVAL_DENIED maps to 409).
+    if (outcome === 'conflict-other-tenant') {
+      return c.json(
+        { error: new EngineError('APPROVAL_DENIED', 'email is already active for another tenant').toEnvelope() },
+        409,
+      )
+    }
+    return c.json({ email, outcome })
+  })
+
+  app.get('/admin/tenants/:tenantId/invites', async (c) => {
+    const tenantId = c.req.param('tenantId')
+    const rows = await listInvites(tenantId, db)
+    const invites = rows.map(toInviteView)
+    return c.json({ invites } satisfies InviteListResponse)
+  })
+
+  app.delete('/admin/tenants/:tenantId/invites/:email', async (c) => {
+    const tenantId = c.req.param('tenantId')
+    const email = decodeURIComponent(c.req.param('email')).trim().toLowerCase()
+    const result = await deprovisionInvite(tenantId, email, db)
+    return c.json(result)
+  })
+}
+
+/** Postgres foreign-key-violation SQLSTATE — surfaced as a clean 404 for a bad tenant id. */
+function isForeignKeyViolation(e: unknown): boolean {
+  const code = (e as { code?: unknown })?.code ?? (e as { cause?: { code?: unknown } })?.cause?.code
+  return code === '23503'
+}
+
 /**
  * Compose the Hono app with NO import-time side effects (no getBoss/serve/connect).
  * index.ts is the only entrypoint that starts the queue + HTTP server.
@@ -169,6 +255,10 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
   mountDemo(app)
   mountDashboard(app)
   mountConsole(app)
+  // ── Operator-only admin: invite management (Wave 3) — SAME fail-closed gate ──
+  app.use('/admin', op)
+  app.use('/admin/*', op)
+  mountAdminInvites(app)
 
   // ── Tenant data plane (/v1) — browser CORS THEN dual-mode auth → c.set('consumer') ──
   // CORS first: it answers the unauthenticated OPTIONS preflight and short-circuits

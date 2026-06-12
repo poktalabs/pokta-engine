@@ -19,6 +19,13 @@ export interface ErrorStateProps {
   title?: ReactNode
   /** Retry handler — omitted (or hidden) for non-retryable errors like 403. */
   onRetry?: () => void
+  /**
+   * Sign-out escape hatch. When the error is a tenant-load failure that "Try
+   * again" can't fix (a persistent 500, a backend that won't resolve), the user
+   * must not be stranded — render a Sign out action so they can leave the session
+   * instead of clearing cookies. Wired by the shell-level error states.
+   */
+  onSignOut?: () => void
   className?: string
 }
 
@@ -64,7 +71,7 @@ function copyForCode(code: ErrorCode | undefined): Copy {
   }
 }
 
-export function ErrorState({ error, title, onRetry, className }: ErrorStateProps) {
+export function ErrorState({ error, title, onRetry, onSignOut, className }: ErrorStateProps) {
   const isForbidden = error ? FORBIDDEN_CODES.has(error.code) : false
   const copy = copyForCode(error?.code)
   const Icon = isForbidden ? Lock : AlertOctagon
@@ -91,10 +98,19 @@ export function ErrorState({ error, title, onRetry, className }: ErrorStateProps
           {error?.message ?? copy.description}
         </p>
       </div>
-      {canRetry && (
-        <Button onClick={onRetry} variant="secondary" size="sm">
-          Try again
-        </Button>
+      {(canRetry || onSignOut) && (
+        <div className="flex items-center gap-3">
+          {canRetry && (
+            <Button onClick={onRetry} variant="secondary" size="sm">
+              Try again
+            </Button>
+          )}
+          {onSignOut && (
+            <Button onClick={onSignOut} variant="ghost" size="sm">
+              Sign out
+            </Button>
+          )}
+        </div>
       )}
     </div>
   )

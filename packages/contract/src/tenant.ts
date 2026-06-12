@@ -43,3 +43,31 @@ export const tenantViewSchema = z.object({
   allowedWorkflows: z.array(z.string()),
 })
 export type TenantView = z.infer<typeof tenantViewSchema>
+
+/**
+ * The lifecycle status of an invite (mirrors the `invite_status` pg enum in
+ * @godin-engine/db): `pending` (seeded, unclaimed), `claimed` (a verified DID is
+ * bound), `revoked` (deprovisioned — frees the email to be re-invited).
+ */
+export const inviteStatusSchema = z.enum(['pending', 'claimed', 'revoked'])
+export type InviteStatus = z.infer<typeof inviteStatusSchema>
+
+/**
+ * A single invite row as projected by the operator-gated admin API (Wave 3). The
+ * MINIMAL honest view: the email, its status, and — when claimed — which DID claimed
+ * it and when (ISO string). Deliberately omits created_at/updated_at; this is an ops
+ * roster, not an audit export.
+ */
+export const inviteViewSchema = z.object({
+  email: z.string(),
+  status: inviteStatusSchema,
+  claimedByDid: z.string().nullable(),
+  claimedAt: z.string().nullable(),
+})
+export type InviteView = z.infer<typeof inviteViewSchema>
+
+/** `GET /admin/tenants/:tenantId/invites` response — the tenant's invite roster. */
+export const inviteListResponseSchema = z.object({
+  invites: z.array(inviteViewSchema),
+})
+export type InviteListResponse = z.infer<typeof inviteListResponseSchema>

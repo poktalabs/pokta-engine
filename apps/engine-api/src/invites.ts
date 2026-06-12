@@ -24,6 +24,37 @@ type DbLike = typeof defaultDb
 export type InviteRow = typeof schema.engineTenantInvites.$inferSelect
 
 /**
+ * The typed outcome of an admin `addInvite` (Wave 3, operator-gated):
+ *   - `'added'` — a NEW pending invite row was inserted,
+ *   - `'reactivated'` — an existing `revoked` row was flipped back to `pending`,
+ *   - `'already-pending'` — the email was already a pending invite for this tenant
+ *     (idempotent no-op),
+ *   - `'already-claimed'` — the email is a `claimed` invite for this tenant; LEFT AS
+ *     IS (un-claiming would orphan the bound member — deprovision is the only path
+ *     that removes a claim, see deprovision-invite.ts),
+ *   - `'conflict-other-tenant'` — the email is ACTIVE (non-revoked) for a DIFFERENT
+ *     tenant; the partial unique index `tenant_invites_active_email` rejects the
+ *     write, mapped here rather than thrown as a 500.
+ */
+export type AdminInviteOutcome =
+  | 'added'
+  | 'reactivated'
+  | 'already-pending'
+  | 'already-claimed'
+  | 'conflict-other-tenant'
+
+/**
+ * The Postgres unique-violation SQLSTATE. The partial unique index on
+ * (email) WHERE status != 'revoked' raises this when an email is already ACTIVE for
+ * a different tenant. We detect it structurally (code on the error or its `cause`)
+ * so the route returns a clean 409 instead of a 500.
+ */
+function isUniqueViolation(e: unknown): boolean {
+  const code = (e as { code?: unknown })?.code ?? (e as { cause?: { code?: unknown } })?.cause?.code
+  return code === '23505'
+}
+
+/**
  * The typed outcome of a claim attempt:
  *   - `{ ok: true, tenantId }` — the DID is (now) bound to the tenant (incl. the
  *     idempotent re-claim by the SAME did),
@@ -150,6 +181,69 @@ export async function claimInvite(
     if (e instanceof ClaimCollisionRollback) return 'collision'
     throw e
   }
+}
+
+/**
+ * addInvite(tenantId, email, db) — operator-gated upsert of a `pending` invite
+ * (Wave 3). Lowercases + trims the email. In ONE transaction, reads the current
+ * (tenant_id, email) row (same table) and acts on its status:
+ *   - no row → INSERT `pending` → `'added'`,
+ *   - `revoked` → UPDATE back to `pending` (+ updated_at) → `'reactivated'`,
+ *   - `pending` → no-op → `'already-pending'`,
+ *   - `claimed` → LEFT AS IS (never un-claim → never orphan the member) → `'already-claimed'`.
+ * An INSERT/UPDATE that activates an email already ACTIVE for ANOTHER tenant trips
+ * the partial unique index (23505) → caught → `'conflict-other-tenant'` (not a 500).
+ * The tenant FK is enforced on INSERT; a non-existent tenant rejects there (the
+ * route surfaces it as a clean error, not a raw 500).
+ */
+export async function addInvite(
+  tenantId: string,
+  email: string,
+  db: DbLike = defaultDb,
+): Promise<AdminInviteOutcome> {
+  const normalizedEmail = email.trim().toLowerCase()
+  const V = schema.engineTenantInvites
+
+  try {
+    return await db.transaction(async (tx) => {
+      const existing = (await tx
+        .select()
+        .from(V)
+        .where(and(eq(V.tenantId, tenantId), eq(V.email, normalizedEmail)))
+        .limit(1)) as InviteRow[]
+
+      const row = existing[0]
+      if (!row) {
+        await tx.insert(V).values({ tenantId, email: normalizedEmail, status: 'pending' })
+        return 'added' as const
+      }
+      if (row.status === 'pending') return 'already-pending' as const
+      if (row.status === 'claimed') return 'already-claimed' as const
+      // status === 'revoked' → reactivate to pending.
+      await tx
+        .update(V)
+        .set({ status: 'pending', updatedAt: sql`now()` })
+        .where(and(eq(V.tenantId, tenantId), eq(V.email, normalizedEmail)))
+      return 'reactivated' as const
+    })
+  } catch (e) {
+    // Email already ACTIVE for another tenant (partial unique index) → 409, not 500.
+    if (isUniqueViolation(e)) return 'conflict-other-tenant'
+    throw e
+  }
+}
+
+/**
+ * listInvites(tenantId, db) — every invite row for the tenant (pending/claimed/
+ * revoked) ordered by email, for operator visibility (Wave 3). Same-table read.
+ */
+export async function listInvites(tenantId: string, db: DbLike = defaultDb): Promise<InviteRow[]> {
+  const V = schema.engineTenantInvites
+  return (await db
+    .select()
+    .from(V)
+    .where(eq(V.tenantId, tenantId))
+    .orderBy(V.email)) as InviteRow[]
 }
 
 /**
