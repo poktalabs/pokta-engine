@@ -300,6 +300,50 @@ export function forConsumer(db: DbLike, consumerId: string): ScopedDb {
   }
 }
 
+/**
+ * The synthetic workflow id under which claim attempts are throttled in the shared
+ * `engine_quota_ledger`. It is NOT a real workflow (the double-underscore makes a
+ * collision with a tenant's allow-listed id impossible), only a ledger partition so
+ * the per-DID claim counter reuses the proven upsert+lock+increment pattern.
+ */
+export const CLAIM_THROTTLE_WORKFLOW_ID = '__tenant_claim__'
+
+/** Default max claim attempts per DID per UTC day (D6 — bounds the getUser flood). */
+export const CLAIM_THROTTLE_PER_DAY = 5
+
+/**
+ * claimThrottle(did, perDay, db) — rate-limit the tenant-claim path PER-DID (D6),
+ * reusing the `engine_quota_ledger` upsert+lock+increment pattern from dispatchRun.
+ * One ledger row per (did, '__tenant_claim__', UTC-day): upsert it, lock it FOR
+ * UPDATE, and throw `EngineError('QUOTA_EXCEEDED')` (→ 429) when the count is already
+ * at/over `perDay`; otherwise increment. This caps how often a single DID can drive a
+ * `getUser(did)` call, closing the token-mint flood vector. Keyed by DID (the privy
+ * identity), NOT a tenant — a claimer has no resolved tenant yet.
+ */
+export async function claimThrottle(
+  did: string,
+  perDay: number = CLAIM_THROTTLE_PER_DAY,
+  db: DbLike = defaultDb,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const day = new Date().toISOString().slice(0, 10) // UTC day
+    const ledgerId = `${did}:${CLAIM_THROTTLE_WORKFLOW_ID}:${day}`
+    await tx.execute(sql`
+      insert into engine_quota_ledger (id, consumer_id, workflow_id, day, count)
+      values (${ledgerId}, ${did}, ${CLAIM_THROTTLE_WORKFLOW_ID}, ${day}, 0)
+      on conflict (id) do nothing
+    `)
+    const locked = await tx.execute(
+      sql`select count from engine_quota_ledger where id = ${ledgerId} for update`,
+    )
+    const current = Number((locked as unknown as Array<{ count: number }>)[0]?.count ?? 0)
+    if (current >= perDay) {
+      throw new EngineError('QUOTA_EXCEEDED', `daily limit of ${perDay} reached for '${CLAIM_THROTTLE_WORKFLOW_ID}'`)
+    }
+    await tx.execute(sql`update engine_quota_ledger set count = count + 1 where id = ${ledgerId}`)
+  })
+}
+
 /** Outcome of resolving a principal to its tenant (PR2). */
 export type ResolveTenantResult = { ok: true; tenant: TenantRow } | { ok: false }
 

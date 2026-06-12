@@ -52,6 +52,17 @@ ALLOWLIST=(
   # tenancy config rows (validated charset/uniqueness/manifest membership). It
   # performs no cross-tenant DATA write. Exempt like tenants.ts.
   "seed-tenants.ts"
+  # invites.ts — the engine_tenant_invites ACCESSOR (Wave 1). Touches ONLY
+  # engine_tenant_invites (+ the one engine_tenant_members write via addTenantMember
+  # in tenants.ts) — NOT an engine_runs-class tenant-DATA table. A targeted grep test
+  # (invites-scope.test.ts) asserts it reads/writes no OTHER engine_* table, so the
+  # broad allowlist exemption cannot hide an unscoped cross-tenant read.
+  "invites.ts"
+  # deprovision-invite.ts — the DB-driven ops deprovision/reset path (D5/D7): revoke
+  # the invite + removeTenantMember in one tx. Not a /v1 request handler (guarded by
+  # import.meta.url like seed-tenants main()); touches only engine_tenant_invites
+  # (+ the membership delete via tenants.ts). Exempt like invites.ts.
+  "deprovision-invite.ts"
 )
 
 # Raw-access patterns that must not appear in /v1 handler files.
