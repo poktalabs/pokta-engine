@@ -234,7 +234,21 @@ async function parseError(res: Response): Promise<ApiError> {
   } catch {
     body = undefined
   }
-  const parsed = errorEnvelopeSchema.safeParse(body)
+  // The engine wraps EVERY error as `{ error: <envelope> }` (engine-api `fail()` +
+  // every hand-rolled `c.json({ error: ... }, status)`). The bug this fixes: we used
+  // to validate the RAW body against the (unwrapped) envelope schema, so the real
+  // `{ error: { code, message, retryable } }` failed the schema and fell through to
+  // the status-based synthesis below — turning every 403 into `SKILL_EXEC_ERROR`
+  // instead of its real code (TENANT_UNKNOWN / APPROVAL_DENIED / …). That broke the
+  // access-denied + auto-provision (TENANT_UNKNOWN) and the approvals (APPROVAL_DENIED)
+  // paths in prod, while the tests passed because their fixtures used the unwrapped
+  // shape. Unwrap `body.error` first; fall back to a bare body (defensive) and finally
+  // to the status synthesis for non-enveloped infra/proxy responses (HTML/empty 401s).
+  const enveloped =
+    body && typeof body === 'object' && 'error' in body
+      ? (body as { error: unknown }).error
+      : body
+  const parsed = errorEnvelopeSchema.safeParse(enveloped)
   if (parsed.success) return new ApiError(parsed.data, res.status)
   // Non-enveloped failure — synthesize an envelope. Map by HTTP status.
   // ⚠ A 401 from an infra/proxy/gateway/CDN auth layer arrives with an HTML or
