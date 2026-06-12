@@ -15,6 +15,7 @@ import { makeIntegrationResolver } from '@godin-engine/integrations'
 import './provider-config'
 import { loadTenantSecrets } from './provider-config'
 import { type ReaperEffects, reapStrandedRuns } from './reaper'
+import { withConsumerId } from './run-input'
 
 /** Up to this many jobs run concurrently per poll (the thesis's "parallel slots"). */
 const TEAM_SIZE = 5
@@ -150,7 +151,7 @@ async function handle(runId: string): Promise<void> {
   }
 
   try {
-    const output = await withTimeout(wf.run(run.input, ctx), wf.manifest.timeoutMs)
+    const output = await withTimeout(wf.run(withConsumerId(run.input, run.consumerId), ctx), wf.manifest.timeoutMs)
     await db
       .update(schema.engineRuns)
       .set({ status: 'succeeded', output, finishedAt: new Date() })
