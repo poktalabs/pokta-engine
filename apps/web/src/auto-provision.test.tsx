@@ -149,6 +149,25 @@ describe('AUTO-PROVISION ★ — graceful degradation (claim fails / 404)', () =
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('access-denied'))
     expect(claimCalls()).toHaveLength(1)
   })
+
+  it('claim 200 but post-claim /me STILL TENANT_UNKNOWN → access-denied (no permanent provisioning spinner)', async () => {
+    // The claim succeeds (200) but the post-claim /me refetch is STILL 403
+    // TENANT_UNKNOWN (read-after-write lag / a bind /me can't see / the split-brain
+    // guard rejecting). The single-flight ref blocks a re-claim, so this MUST fail
+    // closed to the terminal access-denied screen — never hang on 'provisioning'.
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
+
+    renderWithProviders(<StatusProbe />)
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('access-denied'))
+    // Settle: a stray re-render must not (a) re-fire the claim or (b) bounce back to
+    // a non-terminal provisioning spinner.
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByTestId('status')).toHaveTextContent('access-denied')
+    // The claim fired EXACTLY ONCE despite the persistent TENANT_UNKNOWN.
+    expect(claimCalls()).toHaveLength(1)
+  })
 })
 
 describe('AUTO-PROVISION ★ — CRITICAL no-loop / masked-401', () => {
@@ -183,6 +202,25 @@ describe('AUTO-PROVISION ★ — CRITICAL no-loop / masked-401', () => {
       { timeout: 3000 },
     )
     // The claim was NEVER fired — the whole masked-401 invariant.
+    expect(claimCalls()).toHaveLength(0)
+  })
+
+  it('a 401 carrying a TENANT_UNKNOWN body NEVER triggers a claim (status guard, not just code)', async () => {
+    // Out-of-contract: an infra/proxy/WAF layer fabricates the engine envelope shape
+    // and returns HTTP 401 with a {code:'TENANT_UNKNOWN'} body. parseError trusts the
+    // body code, so apiFetch does NOT run its re-auth path (gated on UNAUTHENTICATED)
+    // and the ApiError surfaces with code=TENANT_UNKNOWN + status=401. The unprovisioned
+    // branch gates on status===403, so the claim must NOT fire on this physical 401.
+    mockLivePath('GET', '/v1/tenants/me', {
+      status: 401,
+      body: { code: 'TENANT_UNKNOWN', message: 'masked 401', retryable: false },
+    })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
+
+    renderWithProviders(<StatusProbe />)
+
+    // Not the unprovisioned (provisioning/access-denied) path — a generic error.
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'))
     expect(claimCalls()).toHaveLength(0)
   })
 })

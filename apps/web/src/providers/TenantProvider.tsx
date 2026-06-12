@@ -27,10 +27,12 @@ import { ApiError, apiFetch } from '@/lib/api'
  * provider fires `POST /v1/tenants/claim` ONCE (single-flight, ref-guarded) and
  * surfaces a transient `provisioning` status ("setting up your workspace") while
  * it is in flight. On claim SUCCESS it invalidates + refetches `/v1/tenants/me`
- * (a now-bound tenant resolves → `ready`). On claim FAILURE (any error, incl. a
- * 404 when the Wave-1 backend is not yet deployed, or a persistent
- * TENANT_UNKNOWN) it resolves to the terminal `access-denied` screen. The claim
- * fires AT MOST ONCE per mount — a persistent TENANT_UNKNOWN never loops claims.
+ * (a now-bound tenant resolves → `ready`; but if the refetch is STILL
+ * TENANT_UNKNOWN it fails closed to `access-denied`, never a stuck spinner). On
+ * claim FAILURE (any error, incl. a 404 when the Wave-1 backend is not yet
+ * deployed, or a persistent TENANT_UNKNOWN) it resolves to the terminal
+ * `access-denied` screen. The claim fires AT MOST ONCE per mount — a persistent
+ * TENANT_UNKNOWN never loops claims.
  *
  * CRITICAL invariant: ONLY `TENANT_UNKNOWN` (403) triggers the claim. A `401
  * UNAUTHENTICATED` is handled INSIDE `apiFetch` (single-shot re-auth → logout) and
@@ -129,13 +131,21 @@ export function TenantProvider({ children }: { children: ReactNode }) {
    * compute the exposed status:
    *   - 'idle'     — no claim attempted (or not applicable).
    *   - 'claiming' — POST /v1/tenants/claim is in flight → exposed as 'provisioning'.
-   *   - 'failed'   — the claim rejected (incl. 404 / persistent TENANT_UNKNOWN) →
-   *                  the TENANT_UNKNOWN query error now resolves to 'access-denied'.
-   * On claim success we invalidate /v1/tenants/me; the refetch either resolves a
-   * now-bound tenant ('ready') or — should it somehow still be TENANT_UNKNOWN — the
-   * single-flight ref below blocks a second claim, so it lands on 'access-denied'.
+   *   - 'resolved' — the claim succeeded (200); we invalidated /me. A now-bound
+   *                  tenant resolves to 'ready'. If the post-claim refetch is STILL
+   *                  TENANT_UNKNOWN (read-after-write lag, a bind /me can't see, the
+   *                  split-brain guard rejecting), this is TERMINAL → 'access-denied'
+   *                  (NOT a permanent 'provisioning' spinner — the single-flight ref
+   *                  blocks a second claim, so there is no other escape).
+   *   - 'failed'   — the claim rejected (incl. 404 / claim itself TENANT_UNKNOWN) →
+   *                  the TENANT_UNKNOWN query error resolves to 'access-denied'.
+   * Only the in-flight 'claiming' phase maps to 'provisioning'; every completed
+   * claim ('resolved' / 'failed') that is still TENANT_UNKNOWN fails closed to the
+   * terminal 'access-denied' screen — there is no non-terminal hang.
    */
-  const [claimPhase, setClaimPhase] = useState<'idle' | 'claiming' | 'failed'>('idle')
+  const [claimPhase, setClaimPhase] = useState<'idle' | 'claiming' | 'resolved' | 'failed'>(
+    'idle',
+  )
 
   /**
    * SINGLE-FLIGHT guard (★ no-loop regression). Set true BEFORE the claim fires so a
@@ -145,10 +155,17 @@ export function TenantProvider({ children }: { children: ReactNode }) {
    */
   const claimAttempted = useRef(false)
 
+  // The unprovisioned case requires the CANONICAL 403 TENANT_UNKNOWN, not just the
+  // envelope code. parseError trusts the body `code` over the HTTP status, so an
+  // out-of-contract 401-with-TENANT_UNKNOWN-body (a misbehaving proxy/WAF fabricating
+  // the engine's envelope) would otherwise fire the claim on what was physically a
+  // 401 — the masked-401 the invariant forbids. Gating on status === 403 keeps the
+  // claim strictly on the real unprovisioned (403) path; a 401 stays UNAUTHENTICATED.
   const isTenantUnknown =
     query.isError &&
     query.error instanceof ApiError &&
-    query.error.code === 'TENANT_UNKNOWN'
+    query.error.code === 'TENANT_UNKNOWN' &&
+    query.error.status === 403
 
   useEffect(() => {
     // Fire the claim exactly once, and only for the unprovisioned (TENANT_UNKNOWN)
@@ -160,8 +177,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     apiFetch<TenantView>('/v1/tenants/claim', { method: 'POST' })
       .then(() => {
         // Bound now (or about to be) — refetch /me. A resolved tenant → 'ready'.
-        // (Ignore the claim body; /me is the single source of truth.)
-        setClaimPhase('idle')
+        // (Ignore the claim body; /me is the single source of truth.) Mark the claim
+        // RESOLVED: if the refetch is still TENANT_UNKNOWN the single-flight ref blocks
+        // a re-claim, so 'resolved' makes that terminal (access-denied) instead of a
+        // permanent 'provisioning' spinner.
+        setClaimPhase('resolved')
         void queryClient.invalidateQueries({ queryKey: TENANT_ME_QUERY_KEY })
       })
       .catch(() => {
@@ -177,10 +197,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     let status: TenantContextValue['status']
     if (query.isPending) status = 'loading'
     else if (isTenantUnknown) {
-      // The unprovisioned case: show the transient provisioning state while the
-      // single-shot claim is in flight (or about to fire on the next tick), and the
-      // terminal access-denied only once the claim has FAILED.
-      status = claimPhase === 'failed' ? 'access-denied' : 'provisioning'
+      // The unprovisioned case: show the transient provisioning state ONLY while the
+      // single-shot claim is in flight ('claiming') or about to fire on the next tick
+      // ('idle'). Once the claim has COMPLETED — whether it failed OR succeeded but /me
+      // is STILL TENANT_UNKNOWN ('resolved') — fail closed to the terminal access-denied
+      // screen. The single-flight ref blocks any re-claim, so 'provisioning' must never
+      // be a terminal state (no permanent spinner).
+      status =
+        claimPhase === 'failed' || claimPhase === 'resolved' ? 'access-denied' : 'provisioning'
     } else if (query.isError) {
       status = 'error'
     } else status = 'ready'
