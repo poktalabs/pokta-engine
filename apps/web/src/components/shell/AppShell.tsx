@@ -28,6 +28,9 @@ export function AppShell() {
   const { tenant, status, refetch } = useTenantContext()
 
   if (status === 'loading') return <LoadingState label="Loading workspace…" />
+  // Transparent auto-provision (tenant-invites Wave 2): show the "setting up" state
+  // while the single-shot claim binds this DID, instead of an access-denied flash.
+  if (status === 'provisioning') return <LoadingState label="Setting up your workspace…" />
   if (status === 'access-denied') return <AccessDenied />
   if (status === 'error' || !tenant) {
     return <ErrorState title="Could not load your workspace" onRetry={refetch} />
