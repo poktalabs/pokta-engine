@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useParams } from 'react-router-dom'
+import { usePrivy } from '@privy-io/react-auth'
 import { TopBar } from '@/components/shell/TopBar'
 import { Sidebar } from '@/components/shell/Sidebar'
 import { LoadingState } from '@/components/ui/LoadingState'
@@ -26,6 +27,7 @@ import { useTenantContext } from '@/providers/TenantProvider'
 export function AppShell() {
   const { tenant: tenantParam } = useParams()
   const { tenant, status, refetch } = useTenantContext()
+  const { logout } = usePrivy()
 
   if (status === 'loading') return <LoadingState label="Loading workspace…" />
   // Transparent auto-provision (tenant-invites Wave 2): show the "setting up" state
@@ -33,7 +35,14 @@ export function AppShell() {
   if (status === 'provisioning') return <LoadingState label="Setting up your workspace…" />
   if (status === 'access-denied') return <AccessDenied />
   if (status === 'error' || !tenant) {
-    return <ErrorState title="Could not load your workspace" onRetry={refetch} />
+    // Sign-out escape hatch so a persistent load failure never strands the user.
+    return (
+      <ErrorState
+        title="Could not load your workspace"
+        onRetry={refetch}
+        onSignOut={() => void logout()}
+      />
+    )
   }
 
   // Server is the tenant authority: a URL segment that disagrees is redirected to

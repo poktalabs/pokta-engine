@@ -5,6 +5,7 @@ import {
   RouterProvider,
   useRouteError,
 } from 'react-router-dom'
+import { usePrivy } from '@privy-io/react-auth'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { AccessDenied } from '@/components/auth/AccessDenied'
@@ -25,6 +26,7 @@ import { useTenantContext } from '@/providers/TenantProvider'
  */
 function RootRedirect() {
   const { tenant, status, refetch } = useTenantContext()
+  const { logout } = usePrivy()
   if (status === 'loading') return <LoadingState label="Loading workspace…" />
   // Transparent auto-provision (tenant-invites Wave 2): a brief "setting up" state
   // while the single-shot claim binds this DID to its tenant, instead of an
@@ -32,7 +34,16 @@ function RootRedirect() {
   if (status === 'provisioning') return <LoadingState label="Setting up your workspace…" />
   if (status === 'access-denied') return <AccessDenied />
   if (status === 'error' || !tenant) {
-    return <ErrorState title="Could not load your workspace" onRetry={refetch} />
+    // Offer a sign-out escape hatch: a persistent tenant-load failure that "Try
+    // again" can't fix must not strand the user (the bug they hit pre-#22 — no
+    // recovery without clearing cookies).
+    return (
+      <ErrorState
+        title="Could not load your workspace"
+        onRetry={refetch}
+        onSignOut={() => void logout()}
+      />
+    )
   }
   return <Navigate to={`/${tenant.id}/approvals`} replace />
 }
