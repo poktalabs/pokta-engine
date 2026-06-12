@@ -211,7 +211,7 @@ describe('RUN DETAIL ★ — Re-run dispatches POST /v1/workflows/:id/runs', () 
     // exponential-backoff budget; this case asserts the terminal-error UI, not retry).
     mockLivePath('POST', `/v1/workflows/${WORKFLOW_ID}/runs`, {
       status: 500,
-      body: { code: 'SKILL_EXEC_ERROR', message: 'Dispatch failed — please try again.', retryable: false },
+      body: { error: { code: 'SKILL_EXEC_ERROR', message: 'Dispatch failed — please try again.', retryable: false } },
     })
 
     renderWithProviders(runHarness(RUN_ID))
@@ -233,7 +233,7 @@ describe('RUN DETAIL ★ — graceful degradation (D3): 404 / error never white-
     mockLivePath('GET', '/v1/tenants/me', { status: 200, body: MI_PASE_VIEW })
     mockLivePath('GET', `/v1/runs/${RUN_ID}`, {
       status: 404,
-      body: { code: 'SKILL_EXEC_ERROR', message: 'Run not found.', retryable: false },
+      body: { error: { code: 'SKILL_EXEC_ERROR', message: 'Run not found.', retryable: false } },
     })
 
     renderWithProviders(runHarness(RUN_ID))

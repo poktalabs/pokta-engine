@@ -72,7 +72,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
   it('renders the dedicated access-denied screen on 403 TENANT_UNKNOWN', async () => {
     mockLivePath('GET', '/v1/tenants/me', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
     // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
     // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
@@ -80,7 +80,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
     // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
     mockLivePath('POST', '/v1/tenants/claim', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
 
     renderShellAt('/mi-pase/approvals')
@@ -98,7 +98,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
   it('NEVER falls back to a default/other tenant workspace', async () => {
     mockLivePath('GET', '/v1/tenants/me', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
     // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
     // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
@@ -106,7 +106,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
     // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
     mockLivePath('POST', '/v1/tenants/claim', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
 
     // Deep-link straight at a real tenant's URL — a forged/guessed segment must NOT
@@ -127,7 +127,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
   it('intercepts TENANT_UNKNOWN at the tenant gate, not the generic error/retry path', async () => {
     mockLivePath('GET', '/v1/tenants/me', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
     // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
     // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
@@ -135,7 +135,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
     // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
     mockLivePath('POST', '/v1/tenants/claim', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
 
     renderShellAt('/mi-pase/approvals')
@@ -152,7 +152,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
   it('issues exactly one /tenants/me request carrying Bearer (no retry storm, no X-Service-Key)', async () => {
     mockLivePath('GET', '/v1/tenants/me', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
     // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
     // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
@@ -160,7 +160,7 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
     // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
     mockLivePath('POST', '/v1/tenants/claim', {
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     })
 
     renderShellAt('/mi-pase/approvals')
