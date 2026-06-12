@@ -107,8 +107,8 @@ describe('AUTO-PROVISION ★ — persistent TENANT_UNKNOWN claims AT MOST ONCE (
     // BOTH /me and the claim persistently 403 TENANT_UNKNOWN. The single-flight ref
     // must ensure the claim fetch count is EXACTLY 1 — never a second claim, never a
     // loop — even though /me keeps resolving TENANT_UNKNOWN forever.
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
-    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
 
     renderWithProviders(<StatusProbe />)
 
@@ -143,8 +143,8 @@ describe('AUTO-PROVISION ★ — persistent TENANT_UNKNOWN claims AT MOST ONCE (
   it('the single claim carries the Bearer JWT and never the machine X-Service-Key', async () => {
     // The claim is a user-scoped first-login action: authenticated by the Privy JWT,
     // NEVER by a machine service key (which must never reach the browser).
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
-    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
 
     renderWithProviders(<StatusProbe />)
 
@@ -165,7 +165,7 @@ describe('AUTO-PROVISION ★ — masked-401: a 401 NEVER triggers a claim', () =
     // route so that a wrongful claim would be CAPTURED on capturedRequests (proving
     // it never fired) rather than throwing a no-route error.
     setPrivyState({ ready: true, authenticated: true, token: 'jwt-doomed' })
-    mockLivePath('GET', '/v1/tenants/me', { status: 401, body: UNAUTHENTICATED_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 401, body: { error: UNAUTHENTICATED_ENVELOPE } })
     mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
 
     renderWithProviders(<StatusProbe />)
@@ -191,7 +191,7 @@ describe('AUTO-PROVISION ★ — masked-401: a 401 NEVER triggers a claim', () =
     // surface as the unprovisioned UX (provisioning → access-denied). It is a generic
     // error the whole time.
     setPrivyState({ ready: true, authenticated: true, token: 'jwt-doomed' })
-    mockLivePath('GET', '/v1/tenants/me', { status: 401, body: UNAUTHENTICATED_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 401, body: { error: UNAUTHENTICATED_ENVELOPE } })
     mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
 
     const { container } = renderWithProviders(<StatusProbe />)

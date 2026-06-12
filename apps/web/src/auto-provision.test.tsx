@@ -80,7 +80,7 @@ describe('AUTO-PROVISION ★ — TENANT_UNKNOWN → claim once → refetch → w
       // First /me: unprovisioned (403). After the claim binds the DID, the
       // invalidate-driven refetch resolves the now-bound tenant (200).
       return meCall === 1
-        ? { status: 403, body: TENANT_UNKNOWN_ENVELOPE }
+        ? { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } }
         : { status: 200, body: MI_PASE_VIEW }
     })
     mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
@@ -106,11 +106,11 @@ describe('AUTO-PROVISION ★ — TENANT_UNKNOWN → claim once → refetch → w
     })
     mockLivePath('GET', '/v1/tenants/me', () => ({
       status: 403,
-      body: TENANT_UNKNOWN_ENVELOPE,
+      body: { error: TENANT_UNKNOWN_ENVELOPE },
     }))
     mockLivePath('POST', '/v1/tenants/claim', async () => {
       await claimGate
-      return { status: 403, body: TENANT_UNKNOWN_ENVELOPE }
+      return { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } }
     })
 
     renderWithProviders(<StatusProbe />)
@@ -127,10 +127,10 @@ describe('AUTO-PROVISION ★ — TENANT_UNKNOWN → claim once → refetch → w
 
 describe('AUTO-PROVISION ★ — graceful degradation (claim fails / 404)', () => {
   it('claim 404 (Wave-1 not deployed) → access-denied, never white-screen / unhandled throw', async () => {
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
     mockLivePath('POST', '/v1/tenants/claim', {
       status: 404,
-      body: { code: 'SKILL_NOT_FOUND', message: 'not found', retryable: false },
+      body: { error: { code: 'SKILL_NOT_FOUND', message: 'not found', retryable: false } },
     })
 
     renderWithProviders(<StatusProbe />)
@@ -141,8 +141,8 @@ describe('AUTO-PROVISION ★ — graceful degradation (claim fails / 404)', () =
   })
 
   it('claim TENANT_UNKNOWN (no invite match) → access-denied', async () => {
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
-    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
 
     renderWithProviders(<StatusProbe />)
 
@@ -155,7 +155,7 @@ describe('AUTO-PROVISION ★ — graceful degradation (claim fails / 404)', () =
     // TENANT_UNKNOWN (read-after-write lag / a bind /me can't see / the split-brain
     // guard rejecting). The single-flight ref blocks a re-claim, so this MUST fail
     // closed to the terminal access-denied screen — never hang on 'provisioning'.
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
     mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
 
     renderWithProviders(<StatusProbe />)
@@ -174,8 +174,8 @@ describe('AUTO-PROVISION ★ — CRITICAL no-loop / masked-401', () => {
   it('a PERSISTENT TENANT_UNKNOWN fires the claim AT MOST ONCE (no loop)', async () => {
     // Both /me AND the claim persistently return TENANT_UNKNOWN. The single-flight
     // ref must prevent a second claim from ever firing — never a claim loop.
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
-    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
 
     renderWithProviders(<StatusProbe />)
 
@@ -190,7 +190,7 @@ describe('AUTO-PROVISION ★ — CRITICAL no-loop / masked-401', () => {
     // /me 401s persistently. apiFetch handles the 401 (single-shot re-auth → logout);
     // it surfaces as UNAUTHENTICATED, NOT TENANT_UNKNOWN, so the claim must never fire.
     setPrivyState({ ready: true, authenticated: true, token: 'jwt-doomed' })
-    mockLivePath('GET', '/v1/tenants/me', { status: 401, body: UNAUTHENTICATED_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 401, body: { error: UNAUTHENTICATED_ENVELOPE } })
     // Intentionally register the claim so a wrongful claim would be CAPTURED (not throw).
     mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
 
@@ -213,7 +213,7 @@ describe('AUTO-PROVISION ★ — CRITICAL no-loop / masked-401', () => {
     // branch gates on status===403, so the claim must NOT fire on this physical 401.
     mockLivePath('GET', '/v1/tenants/me', {
       status: 401,
-      body: { code: 'TENANT_UNKNOWN', message: 'masked 401', retryable: false },
+      body: { error: { code: 'TENANT_UNKNOWN', message: 'masked 401', retryable: false } },
     })
     mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
 

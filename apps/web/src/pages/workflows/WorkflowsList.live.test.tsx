@@ -69,9 +69,9 @@ const SECOND_CARD: WorkflowCard = {
   hasDetail: false,
 }
 
-/** Build an enveloped error body for a given contract code. */
-function errBody(code: ErrorEnvelope['code'], message = code): ErrorEnvelope {
-  return { code, message, retryable: false }
+/** Build the REAL wrapped wire error body `{ error: { code, message, retryable } }` for a given contract code. */
+function errBody(code: ErrorEnvelope['code'], message = code): { error: ErrorEnvelope } {
+  return { error: { code, message, retryable: false } }
 }
 
 /**

@@ -85,13 +85,13 @@ const APPROVALS: ApprovalView[] = [
   vinoApproval('apr-2', 'Send proposal reminder'),
 ]
 
-/** Build an enveloped error body for a given code (mirrors reauth.test.tsx). */
+/** Build the REAL wrapped wire error body `{ error: { code, message, retryable } }` (mirrors reauth.test.tsx). */
 function errBody(
   code: ErrorEnvelope['code'],
   message: string = code,
   retryable = false,
-): ErrorEnvelope {
-  return { code, message, retryable }
+): { error: ErrorEnvelope } {
+  return { error: { code, message, retryable } }
 }
 
 beforeEach(() => {

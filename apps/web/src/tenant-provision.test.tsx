@@ -96,7 +96,7 @@ describe('TENANT-PROVISION ★ — TENANT_UNKNOWN → claim once → refetch →
       // First /me is unprovisioned (403 TENANT_UNKNOWN). After the claim binds the
       // DID, the invalidate-driven refetch resolves the now-bound tenant (200).
       return meCall === 1
-        ? { status: 403, body: TENANT_UNKNOWN_ENVELOPE }
+        ? { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } }
         : { status: 200, body: MI_PASE_VIEW }
     })
     mockLivePath('POST', '/v1/tenants/claim', async () => {
@@ -127,7 +127,7 @@ describe('TENANT-PROVISION ★ — TENANT_UNKNOWN → claim once → refetch →
     mockLivePath('GET', '/v1/tenants/me', () => {
       meCall += 1
       return meCall === 1
-        ? { status: 403, body: TENANT_UNKNOWN_ENVELOPE }
+        ? { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } }
         : { status: 200, body: MI_PASE_VIEW }
     })
     mockLivePath('POST', '/v1/tenants/claim', { status: 200, body: MI_PASE_VIEW })
@@ -147,8 +147,8 @@ describe('TENANT-PROVISION ★ — TENANT_UNKNOWN → claim once → refetch →
 
 describe('TENANT-PROVISION ★ — claim failure degrades to access-denied (no white-screen)', () => {
   it('claim → 403 TENANT_UNKNOWN (no invite match) ⇒ access-denied, claim fired once', async () => {
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
-    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
 
     renderWithProviders(<StatusProbe />)
 
@@ -159,8 +159,8 @@ describe('TENANT-PROVISION ★ — claim failure degrades to access-denied (no w
   })
 
   it('claim → 404 (Wave-1 backend not yet deployed) ⇒ access-denied, claim fired once', async () => {
-    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: TENANT_UNKNOWN_ENVELOPE })
-    mockLivePath('POST', '/v1/tenants/claim', { status: 404, body: NOT_FOUND_ENVELOPE })
+    mockLivePath('GET', '/v1/tenants/me', { status: 403, body: { error: TENANT_UNKNOWN_ENVELOPE } })
+    mockLivePath('POST', '/v1/tenants/claim', { status: 404, body: { error: NOT_FOUND_ENVELOPE } })
 
     renderWithProviders(<StatusProbe />)
 
