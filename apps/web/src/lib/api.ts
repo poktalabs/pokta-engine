@@ -70,6 +70,7 @@ const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
  *
  * Exact paths (whole-pathname equality):
  *   - /v1/tenants/me          — tenant identity (W3, unchanged).
+ *   - /v1/tenants/claim       — transparent auto-provision claim (tenant-invites Wave 2).
  *   - /v1/workspace/workflows — the workspace workflow CARDS read model.
  *   - /v1/integrations        — this tenant's integration CONNECTION status rows.
  *   - /v1/runs                — the tenant run list (parent of the run detail).
@@ -82,6 +83,7 @@ const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
  */
 const LIVE_PATHS: ReadonlySet<string> = new Set([
   '/v1/tenants/me',
+  '/v1/tenants/claim',
   '/v1/workspace/workflows',
   '/v1/integrations',
   '/v1/runs',

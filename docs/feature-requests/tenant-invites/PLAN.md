@@ -183,8 +183,28 @@ Admin API (invite CRUD + deprovision UI); identity-token email path (Privy's sca
 `getUser(did)`); invite expiry + resend/revoke UI; real member identity (name/email/role) beyond DIDs; the
 member-roster Settings panel.
 
+## Wave 3 (planned follow-up) — admin invite-management endpoint
+Replaces env-seeding + manual SQL as the way to manage the invite list after bootstrap (D7: env is a
+one-time bootstrap, the DB is the source of truth). Small, operator-gated, reuses Wave 1 logic.
+- **Gate:** `operatorAuth()` (the existing `X-Operator-Key === OPERATOR_KEY` middleware used by `/demo`,
+  `/dashboard`, `/console`; fail-closed when `OPERATOR_KEY` unset → 404). NOT a `/v1` tenant route — it is a
+  cross-tenant operator surface by design, so its DB module is allowlisted like the other operator surfaces.
+- **Routes:**
+  - `POST /admin/tenants/:tenantId/invites` `{ email }` → upsert a `pending` invite (lowercase/validate via the
+    existing `parseInviteEmails`/`validateInviteEmails`; a `revoked` row for that email reactivates to `pending`).
+  - `DELETE /admin/tenants/:tenantId/invites/:email` → deprovision: set the invite `revoked` AND
+    `removeTenantMember(tenantId, claimed_by_did)` in one tx (reuse `deprovision-invite.ts` logic).
+  - `GET /admin/tenants/:tenantId/invites` → list rows (`pending`/`claimed`/`revoked`) for ops visibility.
+- **DB access:** add `addInvite` / `revokeInvite` / `listInvites` to `invites.ts` (already allowlisted + grep-
+  pinned to `engine_tenant_invites`); the routes call those + `removeTenantMember`. No new raw db in `app.ts`.
+- **Tests:** operator-gate fail-closed (no/!`OPERATOR_KEY` → 404; wrong key → 404); add → row pending; list;
+  delete → invite revoked + member removed; reactivate a revoked email. No secret leakage.
+- **Why deferred from the core flow:** the env bootstrap + the auto-provision claim (Waves 1–2) deliver the
+  client outcome ("preload emails, they log in, it works"); the admin API is operational convenience layered on
+  top, kept off the critical path so it doesn't expand the auth-sensitive waves.
+
 ## Implementation Tasks
-Synthesized from the review. Wave 0 = members table, Wave 1 = invites backend, Wave 2 = SPA.
+Synthesized from the review. Wave 0 = members table, Wave 1 = invites backend, Wave 2 = SPA, Wave 3 = admin API.
 - [ ] **T1 (P1)** — db/engine-api — `engine_tenant_members` table + `UNIQUE(did)` + data migration; rewire
   `findTenantByMember`/`addTenantMember`/`removeTenantMember`/seed; drop `members[]`. Verify: ★ auth regressions green; cross-tenant bind rejected.
 - [ ] **T2 (P1)** — engine-api — `/v1/tenants/me` split-brain guard (parity with data routes). Verify: privy-split-brain ★.

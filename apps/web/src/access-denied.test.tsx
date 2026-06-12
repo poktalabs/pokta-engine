@@ -74,6 +74,14 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
       status: 403,
       body: TENANT_UNKNOWN_ENVELOPE,
     })
+    // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
+    // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
+    // which is the terminal path back to access-denied. Wave-1-absent (404) and
+    // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
+    mockLivePath('POST', '/v1/tenants/claim', {
+      status: 403,
+      body: TENANT_UNKNOWN_ENVELOPE,
+    })
 
     renderShellAt('/mi-pase/approvals')
 
@@ -89,6 +97,14 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
 
   it('NEVER falls back to a default/other tenant workspace', async () => {
     mockLivePath('GET', '/v1/tenants/me', {
+      status: 403,
+      body: TENANT_UNKNOWN_ENVELOPE,
+    })
+    // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
+    // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
+    // which is the terminal path back to access-denied. Wave-1-absent (404) and
+    // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
+    mockLivePath('POST', '/v1/tenants/claim', {
       status: 403,
       body: TENANT_UNKNOWN_ENVELOPE,
     })
@@ -113,6 +129,14 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
       status: 403,
       body: TENANT_UNKNOWN_ENVELOPE,
     })
+    // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
+    // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
+    // which is the terminal path back to access-denied. Wave-1-absent (404) and
+    // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
+    mockLivePath('POST', '/v1/tenants/claim', {
+      status: 403,
+      body: TENANT_UNKNOWN_ENVELOPE,
+    })
 
     renderShellAt('/mi-pase/approvals')
 
@@ -127,6 +151,14 @@ describe('ISOLATION ★ — Privy DID in no members[] → access-denied', () => 
 
   it('issues exactly one /tenants/me request carrying Bearer (no retry storm, no X-Service-Key)', async () => {
     mockLivePath('GET', '/v1/tenants/me', {
+      status: 403,
+      body: TENANT_UNKNOWN_ENVELOPE,
+    })
+    // Transparent auto-provision (Wave 2): a TENANT_UNKNOWN /me fires ONE
+    // POST /v1/tenants/claim. Here the claim FAILS (the DID matches no invite),
+    // which is the terminal path back to access-denied. Wave-1-absent (404) and
+    // no-match (403 TENANT_UNKNOWN) both reject → access-denied; assert the screen.
+    mockLivePath('POST', '/v1/tenants/claim', {
       status: 403,
       body: TENANT_UNKNOWN_ENVELOPE,
     })
