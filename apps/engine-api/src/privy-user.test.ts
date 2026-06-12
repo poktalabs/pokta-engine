@@ -4,10 +4,11 @@ import { verifiedEmailsOf, buildDefaultPrivyEmailResolver } from './privy-user'
 
 /**
  * Wave 1 PRIVY VERIFIED-EMAIL seam (D2, security-critical). The extraction must
- * return ONLY Privy-VERIFIED emails — the primary linked email, verified email
- * linked-accounts, and provider-verified google_oauth emails — lowercased, trimmed,
- * deduped. A self-asserted / unverified account NEVER contributes. The default
- * resolver is null when Privy is unconfigured (no network in tests).
+ * return ONLY Privy email-OTP-verified emails — the primary linked email and
+ * `type:'email'` linked-accounts — lowercased, trimmed, deduped. `google_oauth` is
+ * NOT trusted (the SDK exposes no `email_verified` claim). A self-asserted / unverified
+ * account NEVER contributes. The default resolver is null when Privy is unconfigured
+ * (no network in tests).
  */
 
 // Minimal User builder — only the fields verifiedEmailsOf reads. Cast through unknown
@@ -22,14 +23,36 @@ describe('verifiedEmailsOf — verified-only extraction', () => {
     expect(verifiedEmailsOf(u)).toEqual(['owner@example.com'])
   })
 
-  it('collects verified email + google_oauth linked accounts', () => {
+  it('collects email-OTP linked accounts, lowercased+trimmed', () => {
     const u = user({
       linkedAccounts: [
         { type: 'email', address: 'A@b.co' },
+      ] as unknown as User['linkedAccounts'],
+    })
+    expect(verifiedEmailsOf(u)).toEqual(['a@b.co'])
+  })
+
+  it('DROPS google_oauth emails — SDK exposes no email_verified, so they are not trusted (D2)', () => {
+    // Hardening regression (Wave 1 finding #1): a google_oauth account whose `email`
+    // is an invited-but-unclaimed address must NOT reach the match set, because Privy's
+    // Google type cannot prove Google verified that email. The OTP-verified email is
+    // still collected; the google_oauth one is not.
+    const u = user({
+      email: { address: 'otp@verified.com' } as User['email'],
+      linkedAccounts: [
+        { type: 'google_oauth', email: 'attacker-controlled@victim.com' },
+      ] as unknown as User['linkedAccounts'],
+    })
+    expect(verifiedEmailsOf(u)).toEqual(['otp@verified.com'])
+  })
+
+  it('a user whose ONLY email source is google_oauth → [] (no verified email)', () => {
+    const u = user({
+      linkedAccounts: [
         { type: 'google_oauth', email: 'GOOG@gmail.com' },
       ] as unknown as User['linkedAccounts'],
     })
-    expect(verifiedEmailsOf(u).sort()).toEqual(['a@b.co', 'goog@gmail.com'])
+    expect(verifiedEmailsOf(u)).toEqual([])
   })
 
   it('dedupes across the primary email and a linked email account', () => {

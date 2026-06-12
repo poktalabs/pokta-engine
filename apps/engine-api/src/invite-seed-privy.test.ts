@@ -189,11 +189,13 @@ describe('seedTenantInvites — INSERT-ONLY, no update/revoke on re-seed', () =>
 // (3) resolvePrivyEmails extraction — verified-only, fail closed on getUser throw
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Privy verified-email extraction (verifiedEmailsOf)', () => {
-  it('returns ONLY verified addresses — primary + verified email + google_oauth, ignoring others', () => {
+  it('returns ONLY email-OTP-verified addresses — primary + type:email; DROPS google_oauth and others', () => {
     const u = privyUser({
       email: { address: 'Primary@Example.COM ' } as User['email'],
       linkedAccounts: [
         { type: 'email', address: 'Verified@b.co', verifiedAt: new Date() },
+        // google_oauth is DROPPED (Wave 1 finding #1 / D2): the SDK exposes no
+        // email_verified claim, so a Google email cannot be trusted as verified.
         { type: 'google_oauth', email: 'GOOG@gmail.com', verifiedAt: new Date() },
         // Self-asserted / non-email account types MUST be ignored.
         { type: 'wallet', address: '0xabc' },
@@ -201,7 +203,7 @@ describe('Privy verified-email extraction (verifiedEmailsOf)', () => {
         { type: 'custom_auth', customUserId: 'jwt-claim@evil.com' },
       ] as unknown as User['linkedAccounts'],
     })
-    expect(verifiedEmailsOf(u).sort()).toEqual(['goog@gmail.com', 'primary@example.com', 'verified@b.co'])
+    expect(verifiedEmailsOf(u).sort()).toEqual(['primary@example.com', 'verified@b.co'])
   })
 })
 
