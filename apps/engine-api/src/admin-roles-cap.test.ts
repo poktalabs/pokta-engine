@@ -161,8 +161,22 @@ vi.mock('@godin-engine/db', () => {
         },
       }),
     }),
-    // pg_advisory_xact_lock(namespace, hashtext(tenantId)) — recorded no-op.
-    execute: async (_q: unknown) => {
+    // Two raw queries reach execute():
+    //   1. pg_advisory_xact_lock(namespace, hashtext(tenantId)) — recorded no-op.
+    //   2. seatCount's SINGLE-snapshot sum of members + pending invites (claim-straddle
+    //      hardening) — detected by its SQL text + the leading tenantId bind, computed
+    //      from the in-memory store and traced as 'count' (replaces the old select:M /
+    //      select:V pair, which is the whole point: one snapshot, not two reads).
+    execute: async (q: unknown) => {
+      const sqlText = (q as { __sql?: string })?.__sql ?? ''
+      const vals = ((q as { vals?: unknown[] })?.vals ?? []) as string[]
+      if (sqlText.includes('engine_tenant_members') && sqlText.includes('engine_tenant_invites')) {
+        trace.push('count')
+        const tenantId = vals[0]
+        const m = store.members.filter((x) => x.tenantId === tenantId).length
+        const p = store.invites.filter((x) => x.tenantId === tenantId && x.status === 'pending').length
+        return [{ seats: m + p }] as unknown as []
+      }
       trace.push('lock')
       return []
     },
@@ -347,19 +361,21 @@ describe('★ the seat cap is checked under the per-tenant advisory lock', () =>
   it('addInvite takes the seat lock BEFORE counting + inserting', async () => {
     store.members.push(member(ADMIN, 'admin')) // under cap
     await addInvite(T, 'new@x.co', 'member', ADMIN)
-    // The advisory lock fires first; the seat count (select:M / select:V) and the
-    // insert all happen after it — never before.
+    // The advisory lock fires first; the existing-row lookup (select:V), the single-
+    // snapshot seat count ('count') and the insert all happen after it — never before.
     const lockAt = trace.indexOf('lock')
     expect(lockAt).toBeGreaterThanOrEqual(0)
-    const firstCount = Math.min(
-      ...['select:M', 'select:V', 'insert:V']
+    const firstWork = Math.min(
+      ...['select:V', 'count', 'insert:V']
         .map((op) => trace.indexOf(op))
         .filter((idx) => idx >= 0),
     )
-    expect(lockAt).toBeLessThan(firstCount)
-    // Order within the protected region: count (M then V) precedes the insert.
-    expect(trace.indexOf('select:M')).toBeLessThan(trace.indexOf('insert:V'))
-    expect(trace.indexOf('select:V')).toBeLessThan(trace.indexOf('insert:V'))
+    expect(lockAt).toBeLessThan(firstWork)
+    // Order within the protected region: the seat count precedes the insert (the cap is
+    // re-checked before a new seat is written), and it is a SINGLE snapshot ('count'),
+    // not two separate member/invite reads (the claim-straddle fix).
+    expect(trace.indexOf('count')).toBeLessThan(trace.indexOf('insert:V'))
+    expect(trace.filter((t) => t === 'count')).toHaveLength(1)
   })
 
   it('withTenantSeatLock runs fn and emits the advisory-lock execute first', async () => {

@@ -262,10 +262,21 @@ vi.mock('@godin-engine/db', () => {
         }
       },
     }),
-    // deprovision `select ... for update` (vals [tenantId, email]); advisory lock
-    // (vals [namespace, tenantId]) → return [] harmlessly.
+    // Three raw queries reach execute():
+    //   - seatCount's SINGLE-snapshot sum (vals [tenantId, tenantId]; SQL names both
+    //     engine_tenant_members + engine_tenant_invites) → compute the cap denominator
+    //     from the store (members + pending invites), so TEAM_FULL is enforced.
+    //   - deprovision `select ... for update` (vals [tenantId, email]) → the locked row.
+    //   - advisory lock (vals [namespace(number), tenantId]) → return [] harmlessly.
     execute: async (q: unknown) => {
+      const sqlText = (q as { __sql?: string })?.__sql ?? ''
       const vals = (q as { vals?: unknown[] })?.vals ?? []
+      if (sqlText.includes('engine_tenant_members') && sqlText.includes('engine_tenant_invites')) {
+        const tenantId = vals[0] as string
+        const m = store.members.filter((x) => x.tenantId === tenantId).length
+        const p = store.invites.filter((x) => x.tenantId === tenantId && x.status === 'pending').length
+        return [{ seats: m + p }]
+      }
       if (vals.length === 2 && typeof vals[0] === 'string' && typeof vals[1] === 'string') {
         const [tenantId, email] = vals as [string, string]
         const inv = store.invites.find(

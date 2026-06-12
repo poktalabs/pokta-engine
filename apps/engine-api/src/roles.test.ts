@@ -59,8 +59,24 @@ vi.mock('@godin-engine/db', () => {
     return out
   }
 
+  // seatCount now runs a SINGLE raw query summing members + pending invites against ONE
+  // snapshot (claim-straddle hardening). The mock detects it by its SQL text and the two
+  // tenantId binds, then computes the sum from the in-memory store.
+  const execute = async (q: unknown): Promise<Array<{ seats: number }>> => {
+    const sqlText = (q as { __sql?: string })?.__sql ?? ''
+    const vals = ((q as { vals?: unknown[] })?.vals ?? []) as string[]
+    if (sqlText.includes('engine_tenant_members') && sqlText.includes('engine_tenant_invites')) {
+      const tenantId = vals[0]
+      const m = store.members.filter((x) => x.tenantId === tenantId).length
+      const p = store.invites.filter((x) => x.tenantId === tenantId && x.status === 'pending').length
+      return [{ seats: m + p }]
+    }
+    return []
+  }
+
   // select(cols).from(TABLE).where(pred)[.limit(n)] — dispatch by the from-table tag.
   const db = {
+    execute,
     select: (_cols?: Record<string, unknown>) => ({
       from: (t: { __table?: string }) => {
         const table = t?.__table

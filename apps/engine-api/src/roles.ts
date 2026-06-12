@@ -74,20 +74,26 @@ export async function tenantRoleOf(
  */
 export async function seatCount(tenantId: string, db: DbLike = defaultDb): Promise<number> {
   if (!tenantId) return 0
-  const M = schema.engineTenantMembers
-  const V = schema.engineTenantInvites
 
-  const memberRows = (await db
-    .select({ did: M.did })
-    .from(M)
-    .where(eq(M.tenantId, tenantId))) as Array<{ did: string }>
+  // SINGLE-SNAPSHOT count (hardening — the claim-straddle race): both sub-counts are
+  // summed in ONE statement, NOT two separately-awaited SELECTs. Under Postgres READ
+  // COMMITTED each statement takes a FRESH snapshot, so two awaited reads could straddle
+  // a concurrent claim commit. claim deliberately does NOT hold the seat lock — it is
+  // "seat-neutral" (one pending=counted flips to claimed=not-counted + one member=
+  // counted, net 0) — so at an at-cap tenant an addInvite for a NEW email could read 4
+  // members (claim not yet committed), the claim commits in the inter-statement gap,
+  // then read 0 pending → compute 4 < 5 → insert a 6th seat. Folding both sub-counts
+  // into one query makes a concurrent claim observable as either (M, P) or (M+1, P-1),
+  // both summing to the true total — the straddle is impossible. The two sub-SELECTs
+  // touch ONLY engine_tenant_members / engine_tenant_invites (roles-scope allowlist).
+  const rows = (await db.execute(sql`
+    select
+      (select count(*) from engine_tenant_members where tenant_id = ${tenantId})
+      + (select count(*) from engine_tenant_invites where tenant_id = ${tenantId} and status = 'pending')
+      as seats
+  `)) as unknown as Array<{ seats: number | string }>
 
-  const pendingRows = (await db
-    .select({ email: V.email })
-    .from(V)
-    .where(and(eq(V.tenantId, tenantId), eq(V.status, 'pending')))) as Array<{ email: string }>
-
-  return memberRows.length + pendingRows.length
+  return Number(rows[0]?.seats ?? 0)
 }
 
 /**
