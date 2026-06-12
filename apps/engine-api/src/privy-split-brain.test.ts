@@ -78,20 +78,35 @@ vi.mock('@godin-engine/db', () => {
     }
     return Array.isArray(p.eq) && p.eq[0] === 'consumer_id' ? p.eq[1] : undefined
   }
+  // Pull the queried DID out of an `eq(M.did, did)` where-marker.
+  const didFrom = (pred: unknown): string | undefined => {
+    const p = pred as { eq?: [string, string] }
+    return p?.eq?.[0] === 'M.did' ? p.eq[1] : undefined
+  }
   // listRuns(consumerId): select().from(R).where(and(eq(consumer_id,id),...)).orderBy().limit()
-  // findTenantByMember(did): select().from(T).where(sql{member}).limit(2)
+  // findTenantByMember(did): select({tenant:T}).from(M).innerJoin(T,...).where(eq(M.did,did)).limit(2)
   const select = (_proj?: unknown) => ({
     from: () => ({
-      innerJoin: () => ({ where: () => ({ orderBy: () => ({ limit: async () => [] }) }) }),
-      where: (pred: { member?: string }) => ({
+      innerJoin: () => ({
+        where: (pred: unknown) => ({
+          // approvals join path (used elsewhere) keeps the orderBy().limit() shape…
+          orderBy: () => ({ limit: async () => [] }),
+          // …and findTenantByMember resolves the membership join by DID.
+          limit: async (_n: number) => {
+            const did = didFrom(pred)
+            return store.tenants
+              .filter((t) => did != null && t.members.includes(did))
+              .map((tenant) => ({ tenant }))
+          },
+        }),
+      }),
+      where: (pred: unknown) => ({
         orderBy: () => ({
           limit: async () => {
             const want = consumerFrom(pred)
             return store.runs.filter((r) => want === undefined || r.consumerId === want)
           },
         }),
-        limit: async (_n: number) =>
-          store.tenants.filter((t) => pred?.member != null && t.members.includes(pred.member)),
       }),
     }),
   })
@@ -116,7 +131,8 @@ vi.mock('@godin-engine/db', () => {
     schema: {
       engineRuns: { runId: 'run_id', consumerId: 'consumer_id', status: 'status', createdAt: 'created_at' },
       engineApprovals: { approvalId: 'approval_id', sourceRunId: 'source_run_id', state: 'state', approver: 'approver', createdAt: 'created_at' },
-      engineTenants: { tenantId: 'tenant_id', members: 'members' },
+      engineTenants: { tenantId: 'tenant_id' },
+      engineTenantMembers: { tenantId: 'M.tenant_id', did: 'M.did' },
     },
   }
 })
@@ -125,10 +141,7 @@ vi.mock('drizzle-orm', () => ({
   and: (...x: unknown[]) => ({ and: x }),
   eq: (a: unknown, b: unknown) => ({ eq: [a, b] }),
   desc: (x: unknown) => x,
-  sql: Object.assign((_s: TemplateStringsArray, ...vals: unknown[]) => {
-    const did = vals.find((v) => typeof v === 'string' && v !== 'members') as string | undefined
-    return { member: did }
-  }, { raw: () => ({}) }),
+  sql: Object.assign((_s: TemplateStringsArray, ..._vals: unknown[]) => ({}), { raw: () => ({}) }),
 }))
 
 const { buildApp } = await import('./app')

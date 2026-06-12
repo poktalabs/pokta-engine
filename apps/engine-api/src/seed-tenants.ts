@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import { listManifests } from '@godin-engine/workflows'
 import { listIntegrations } from '@godin-engine/integrations'
+import { addTenantMember, MemberDidCollisionError } from './tenants'
 
 /**
  * Tenant registry SEED + validation (PR2 T8). Idempotent: an `ON CONFLICT` upsert
@@ -57,7 +58,7 @@ export function envMemberDids(secretPrefix: string | null): string[] {
 }
 
 /** Union two DID lists, preserving order (a first, then new b entries), deduped. */
-function unionDids(a: string[], b: string[]): string[] {
+function unionMemberDids(a: string[], b: string[]): string[] {
   const seen = new Set(a)
   const out = [...a]
   for (const did of b) {
@@ -139,23 +140,57 @@ export function validateSeeds(seeds: TenantSeed[], manifestIds: string[] = listM
 }
 
 /**
+ * Pre-validate the FULL set of member DIDs that `seedTenants` is about to bind —
+ * the static seed `members` UNION the env DIDs (`${secretPrefix}_MEMBER_DIDS`) per
+ * tenant — for a cross-tenant duplicate BEFORE any row is written. The membership
+ * table's `UNIQUE(did)` makes a cross-tenant double-bind a hard error; without this
+ * gate, `seedTenants`' per-DID `addTenantMember` would throw MID-LOOP, AFTER the
+ * colliding tenant's row was already upserted — a partially-applied seed / hard
+ * deploy abort. Throwing ONE aggregated error here keeps the seed all-or-nothing:
+ * a shared DID fails the deploy fast, names the DID and BOTH tenants, and writes
+ * nothing. Resolution is unchanged for any valid (collision-free) set.
+ */
+export function validateMemberDids(
+  seeds: TenantSeed[],
+  envDids: (secretPrefix: string | null) => string[] = envMemberDids,
+): void {
+  const owner = new Map<string, string>() // did → first tenant that claimed it
+  for (const t of seeds) {
+    const dids = unionMemberDids(t.members, envDids(t.secretPrefix))
+    for (const did of dids) {
+      const prior = owner.get(did)
+      if (prior && prior !== t.tenantId) {
+        throw new Error(
+          `member DID '${did}' is bound to more than one tenant ('${prior}' and '${t.tenantId}'); ` +
+            `a DID may belong to exactly one tenant (UNIQUE(did)) — reconcile the seed/env before deploying`,
+        )
+      }
+      owner.set(did, t.tenantId)
+    }
+  }
+}
+
+/**
  * Seed (idempotent upsert) the validated tenants into engine_tenants. Re-running
  * keeps config-managed columns in sync (name/status/branding/allow-list/prefix)
  * while bumping `updated_at`. `created_at` is untouched.
  *
- * MEMBER DIDs (PR2b B1) are ADDITIVE and never wiped:
- *   - the INSERTed `members` is the seed's static `members` UNION the env DIDs
- *     (`${secretPrefix}_MEMBER_DIDS`), deduped;
- *   - on CONFLICT we set `members` to the UNION of the EXISTING column and the
- *     env-derived insert values (`array(select distinct unnest(existing || excluded))`).
- *     So a re-deploy ADDS any new env DIDs while preserving DIDs added out-of-band
- *     — it can never wipe `members` (an empty/unset env is a no-op: the union with
- *     `excluded.members={}` returns the existing set unchanged).
+ * MEMBER DIDs (PR2b B1 / Wave 0 D9) are ADDITIVE and never wiped. Membership now
+ * lives in `engine_tenant_members` (NOT a column here): after upserting the tenant
+ * row, each DID — the static seed `t.members` UNION the env DIDs
+ * (`${secretPrefix}_MEMBER_DIDS`) — is bound via `addTenantMember(..., source='seed')`
+ * with INSERT-ONLY semantics (`ON CONFLICT (tenant_id, did) DO NOTHING`). So a
+ * re-deploy ADDS any new DIDs while preserving rows already present (incl. ones
+ * added out-of-band); an empty/unset env binds nothing (no wipe → no lockout). The
+ * `UNIQUE(did)` guard makes a cross-tenant double-bind a `MemberDidCollisionError`
+ * (surfaced loudly rather than silently mis-binding).
  */
 export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: TenantSeed[] = TENANT_SEEDS): Promise<void> {
   validateSeeds(seeds)
+  // Reject a cross-tenant duplicate DID BEFORE any row write so the seed is
+  // all-or-nothing (never a partial state on a mid-loop UNIQUE(did) collision).
+  validateMemberDids(seeds)
   for (const t of seeds) {
-    const members = unionDids(t.members, envMemberDids(t.secretPrefix))
     await db
       .insert(schema.engineTenants)
       .values({
@@ -166,7 +201,6 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
         locale: t.locale,
         branding: t.branding,
         allowedWorkflows: t.allowedWorkflows,
-        members,
         secretPrefix: t.secretPrefix,
       })
       .onConflictDoUpdate({
@@ -179,15 +213,32 @@ export async function seedTenants(db: typeof defaultDb = defaultDb, seeds: Tenan
           branding: t.branding,
           allowedWorkflows: t.allowedWorkflows,
           secretPrefix: t.secretPrefix,
-          // ADDITIVE union: keep every existing DID, add the env-derived ones.
-          members: sql`(
-            select coalesce(array(
-              select distinct unnest(${schema.engineTenants.members} || excluded.members)
-            ), '{}')
-          )`,
           updatedAt: sql`now()`,
         },
       })
+
+    // Bind member DIDs into the membership table (insert-only, additive). Static
+    // seed members UNION env DIDs, deduped; each is an idempotent ON CONFLICT DO
+    // NOTHING insert tagged source='seed'.
+    const memberDids = unionMemberDids(t.members, envMemberDids(t.secretPrefix))
+    for (const did of memberDids) {
+      try {
+        await addTenantMember(t.tenantId, did, db, 'seed')
+      } catch (e) {
+        // validateMemberDids should have caught any cross-tenant duplicate above;
+        // this is a belt-and-suspenders map of a UNIQUE(did) violation (e.g. a row
+        // bound out-of-band to another tenant since validation) to an actionable,
+        // DID-naming seed error rather than a raw driver error.
+        if (e instanceof MemberDidCollisionError) {
+          throw new Error(
+            `seed: member DID '${did}' (tenant '${t.tenantId}') is already bound to another tenant; ` +
+              `reconcile membership before re-seeding`,
+            { cause: e },
+          )
+        }
+        throw e
+      }
+    }
   }
 }
 
