@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { pgTable, pgEnum, text, jsonb, integer, numeric, timestamp, uniqueIndex, index, primaryKey } from 'drizzle-orm/pg-core'
+import { pgTable, pgEnum, text, jsonb, integer, numeric, timestamp, uniqueIndex, index, primaryKey, check } from 'drizzle-orm/pg-core'
 
 export const runStatus = pgEnum('run_status', ['queued', 'running', 'succeeded', 'failed'])
 export const approvalState = pgEnum('approval_state', ['pending', 'approved', 'rejected'])
@@ -223,4 +223,57 @@ export const engineTenantIntegrations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.integrationId] })],
+)
+
+/**
+ * Tenant INVITES (Wave 1 / D1, D8) — the email-preauthorized first-login layer. An
+ * operator seeds a tenant's verified-email allow-list here; on a Privy user's FIRST
+ * login the engine matches their Privy-VERIFIED email against this table and binds
+ * their DID into the tenant (`engine_tenant_members`), recording the claim. The
+ * table — not env — is the source of truth (D7): env (`${secretPrefix}_INVITE_EMAILS`)
+ * is a one-time INSERT-ONLY bootstrap; deprovisioning is a DB op (revoke), never an
+ * env side effect.
+ *
+ *   - `PK(tenant_id, email)` — one invite row per (tenant, email).
+ *   - `email CHECK (email = lower(email))` — emails are stored lowercased; ops SQL
+ *     cannot insert a mixed-case/space variant that would dodge the match.
+ *   - `status` — 'pending' (unclaimed) | 'claimed' (a DID bound it) | 'revoked'
+ *     (deprovisioned; KEPT as an audit row, never deleted).
+ *   - `claimed_by_did` / `claimed_at` — who claimed it and when (audit).
+ *   - **partial unique index `tenant_invites_active_email` on (email) WHERE
+ *     status != 'revoked'** (D8) — GLOBAL-unique ACTIVE email: a verified email maps
+ *     to exactly ONE tenant, so the email alone determines the tenant (no hint, no
+ *     confused-deputy). A revoked row frees the email to be re-invited elsewhere.
+ *
+ * FK → engine_tenants(tenant_id) ON DELETE CASCADE: dropping a tenant drops its
+ * invites.
+ */
+export const inviteStatus = pgEnum('invite_status', ['pending', 'claimed', 'revoked'])
+
+export const engineTenantInvites = pgTable(
+  'engine_tenant_invites',
+  {
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => engineTenants.tenantId, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    status: inviteStatus('status').notNull().default('pending'),
+    claimedByDid: text('claimed_by_did'),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.email] }),
+    // GLOBAL-unique ACTIVE email (D8): partial unique index so an email maps to at
+    // most ONE non-revoked tenant invite. The WHERE clause is LOAD-BEARING — without
+    // it a revoked invite would still block re-inviting the email elsewhere.
+    uniqueIndex('tenant_invites_active_email')
+      .on(t.email)
+      .where(sql`${t.status} != 'revoked'`),
+    // Emails are stored lowercased (parseInviteEmails lowercases+trims); this CHECK
+    // is the DB backstop so ops SQL cannot insert a mixed-case variant that dodges
+    // the verified-email match.
+    check('engine_tenant_invites_email_lower', sql`${t.email} = lower(${t.email})`),
+  ],
 )

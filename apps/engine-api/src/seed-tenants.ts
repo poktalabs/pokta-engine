@@ -369,10 +369,78 @@ export async function seedTenantIntegrations(
   }
 }
 
+// ── Per-tenant invite seed (Wave 1 / D7, insert-only bootstrap) ──────────────
+
+/** A very loose email shape: `something@something.tld`. Not an RFC validator — a typo guard. */
+const INVITE_EMAIL_RE = /^.+@.+\..+$/
+
+/**
+ * Parse a tenant's `${secretPrefix}_INVITE_EMAILS` env value (Wave 1, mirrors
+ * `envMemberDids`). Comma-separated emails. Each is trimmed, LOWERCASED, blanks are
+ * dropped, and the set is DEDUPED. NORMALIZATION is lowercase+trim ONLY (no Gmail
+ * dot/plus collapsing — not globally safe; Codex). Entries that fail the loose
+ * email-shape check are KEPT VERBATIM here so `validateInviteEmails` can reject them
+ * loudly; an unset/blank env → `[]`.
+ */
+export function parseInviteEmails(raw: string | undefined): string[] {
+  if (!raw?.trim()) return []
+  const seen = new Set<string>()
+  for (const part of raw.split(',')) {
+    const email = part.trim().toLowerCase()
+    if (email) seen.add(email)
+  }
+  return [...seen]
+}
+
+/**
+ * Validate parsed invite emails — THROWS on the FIRST address that fails the loose
+ * shape check (`/.+@.+\..+/`) so a typo in `${secretPrefix}_INVITE_EMAILS` fails the
+ * deploy loudly rather than seeding an unmatchable invite row.
+ */
+export function validateInviteEmails(emails: string[]): void {
+  for (const email of emails) {
+    if (!INVITE_EMAIL_RE.test(email)) {
+      throw new Error(
+        `invite seed: '${email}' is not a valid email address (must match ${INVITE_EMAIL_RE})`,
+      )
+    }
+  }
+}
+
+/**
+ * Seed (INSERT-ONLY bootstrap, D7) per-tenant invites from env
+ * (`${secretPrefix}_INVITE_EMAILS`). For each tenant with a non-null secretPrefix,
+ * parse + validate the email list and INSERT each as a `status='pending'` row with
+ * `ON CONFLICT (tenant_id, email) DO NOTHING`. This NEVER updates, NEVER revokes,
+ * and NEVER treats env-absence as a signal: env is a one-time bootstrap, the DB is
+ * the source of truth. A claimed/revoked row is left exactly as it is on re-deploy.
+ * Deprovisioning is a DB op (deprovision-invite.ts), never an env side effect.
+ *
+ * Raw db access is fine here (this module is allowlisted in scripts/check-scoped-db.sh).
+ */
+export async function seedTenantInvites(
+  db: typeof defaultDb = defaultDb,
+  seeds: TenantSeed[] = TENANT_SEEDS,
+): Promise<void> {
+  const V = schema.engineTenantInvites
+  for (const t of seeds) {
+    if (t.secretPrefix === null) continue
+    const emails = parseInviteEmails(process.env[`${t.secretPrefix}_INVITE_EMAILS`])
+    validateInviteEmails(emails)
+    for (const email of emails) {
+      await db
+        .insert(V)
+        .values({ tenantId: t.tenantId, email, status: 'pending' })
+        .onConflictDoNothing({ target: [V.tenantId, V.email] })
+    }
+  }
+}
+
 /** Deploy entrypoint: `tsx apps/engine-api/src/seed-tenants.ts`. */
 async function main(): Promise<void> {
   await seedTenants()
   await seedTenantIntegrations()
+  await seedTenantInvites()
   // eslint-disable-next-line no-console
   console.log(`[seed-tenants] upserted ${TENANT_SEEDS.length} tenant(s): ${TENANT_SEEDS.map((t) => t.tenantId).join(', ')}`)
 }

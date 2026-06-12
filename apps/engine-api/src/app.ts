@@ -14,8 +14,14 @@ import type {
 } from '@godin-engine/contract'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { consumerAuth, type AuthOptions, type Consumer } from './auth'
-import { forConsumer, resolveTenant } from './scoped-db'
+import { forConsumer, resolveTenant, claimThrottle, CLAIM_THROTTLE_PER_DAY } from './scoped-db'
 import { allowedWorkflowsFor, toTenantView, type TenantRow } from './tenants'
+import { findInviteForEmails, claimInvite } from './invites'
+import {
+  buildDefaultPrivyEmailResolver,
+  type ResolvePrivyEmails,
+} from './privy-user'
+import { isClaimNegCached, rememberClaimMiss } from './claim-neg-cache'
 import { cardsForTenant, familyMemberIds } from './workspace-cards'
 import { mountDemo } from './demo'
 import { mountDashboard } from './dashboard'
@@ -121,7 +127,23 @@ export interface BuildAppOptions {
   auth?: AuthOptions
   /** Override CORS allowed origins (tests). Defaults to the CORS_ORIGINS env. */
   corsOrigins?: string[]
+  /**
+   * Override the Privy verified-email resolver for POST /v1/tenants/claim (tests
+   * inject an OFFLINE resolver so no getUser network call happens). Defaults to the
+   * real getUser-backed resolver built from PRIVY_APP_ID/PRIVY_APP_SECRET; when Privy
+   * is unconfigured the default is null and every claim is treated as no-match.
+   */
+  resolvePrivyEmails?: ResolvePrivyEmails
 }
+
+/**
+ * The SINGLE fixed message for every claim/resolve failure (D-anti-enum). The
+ * client response is BYTE-IDENTICAL across no-match / collision / inactive / revoked
+ * / no-email so a caller cannot enumerate which emails are invited or which DIDs
+ * collide. `EngineError.toEnvelope()` exposes `message`, so the message string MUST
+ * be identical too — not just the code.
+ */
+const TENANT_UNKNOWN_MESSAGE = 'principal maps to no active tenant'
 
 /**
  * Compose the Hono app with NO import-time side effects (no getBoss/serve/connect).
@@ -129,6 +151,10 @@ export interface BuildAppOptions {
  */
 export function buildApp(opts: BuildAppOptions = {}): Hono {
   const app = new Hono()
+
+  // The verified-email resolver for POST /v1/tenants/claim: the injected (test)
+  // resolver wins; otherwise the real getUser-backed one (null when Privy unconfigured).
+  const resolvePrivyEmails = opts.resolvePrivyEmails ?? buildDefaultPrivyEmailResolver()
 
   app.get('/', (c) => c.json({ service: 'godin-engine engine-api', version: '0.1.0', ok: true }))
 
@@ -174,6 +200,93 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
     }
     const view = toTenantView(resolved.tenant, allowedWorkflowsFor(resolved.tenant))
     return c.json(view)
+  })
+
+  /**
+   * POST /v1/tenants/claim (Wave 1 / D4) — email-preauthorized first-login auto-
+   * provision. A Privy principal whose DID is in no tenant yet matches their
+   * Privy-VERIFIED email against engine_tenant_invites and, on a match, binds the DID
+   * into that tenant; later logins resolve straight through membership.
+   *
+   * Flow (order matters):
+   *   (1) Privy-bearer only — a service principal already IS its tenant, never claims.
+   *   (2) Already a member (resolveTenant ok) → return its TenantView (idempotent;
+   *       NO Privy call, NO throttle charge).
+   *   (3) DID in the negative cache (a recent no-match) → identical TENANT_UNKNOWN,
+   *       skipping Privy (D6 flood guard).
+   *   (4) Throttle the claim per-DID (D6) → over-limit returns QUOTA_EXCEEDED (429).
+   *   (5) resolvePrivyEmails(did) (injected seam) → findInviteForEmails → claimInvite.
+   *   (6) ok → freshly-resolved TenantView. ANY failure (no email / no match /
+   *       collision / inactive / revoked) → cache the miss + the SINGLE identical
+   *       TENANT_UNKNOWN envelope (anti-enumeration). Failures are logged SERVER-SIDE
+   *       (did + reason) for ops, never leaked to the client.
+   */
+  app.post('/v1/tenants/claim', async (c) => {
+    const consumer = c.get('consumer')
+
+    // (1) Privy-bearer only. A service principal is its own tenant; claiming is N/A.
+    if (consumer.mode !== 'privy') {
+      return fail(c, new EngineError('TENANT_UNKNOWN', TENANT_UNKNOWN_MESSAGE))
+    }
+    const did = consumer.identity
+    if (!did) return fail(c, new EngineError('TENANT_UNKNOWN', TENANT_UNKNOWN_MESSAGE))
+
+    // (2) Already bound → idempotent: return the current TenantView, no Privy/throttle.
+    const existing = await resolveTenant(consumer)
+    if (existing.ok) {
+      const tenantId = existing.tenant.tenantId
+      // Same confused-deputy guard as /tenants/me & the data routes.
+      if (consumer.id && consumer.id !== tenantId) {
+        return fail(c, new EngineError('TENANT_UNKNOWN', TENANT_UNKNOWN_MESSAGE))
+      }
+      return c.json(toTenantView(existing.tenant, allowedWorkflowsFor(existing.tenant)))
+    }
+
+    // The single byte-identical failure response (anti-enumeration). Every distinct
+    // failure reason below returns EXACTLY this; the reason is only logged server-side.
+    const denyAndRemember = (reason: string) => {
+      rememberClaimMiss(did)
+      // eslint-disable-next-line no-console
+      console.warn(`[claim] denied did=${did} reason=${reason}`)
+      return fail(c, new EngineError('TENANT_UNKNOWN', TENANT_UNKNOWN_MESSAGE))
+    }
+
+    // (3) Negative cache: a recent no-match short-circuits WITHOUT calling Privy.
+    if (isClaimNegCached(did)) {
+      return fail(c, new EngineError('TENANT_UNKNOWN', TENANT_UNKNOWN_MESSAGE))
+    }
+
+    // (4) Per-DID claim throttle (D6). Over the daily limit → 429 QUOTA_EXCEEDED.
+    try {
+      await claimThrottle(did, CLAIM_THROTTLE_PER_DAY, db)
+    } catch (e) {
+      if (e instanceof EngineError) return fail(c, e)
+      throw e
+    }
+
+    // (5) Resolve the DID's VERIFIED emails (injected seam; null → unconfigured → no match).
+    if (!resolvePrivyEmails) return denyAndRemember('privy-email-resolver-unconfigured')
+    let emails: string[]
+    try {
+      emails = await resolvePrivyEmails(did)
+    } catch {
+      // A resolver throw is fail-closed (the default impl already returns [] on throw).
+      return denyAndRemember('privy-getuser-threw')
+    }
+    if (emails.length === 0) return denyAndRemember('no-verified-email')
+
+    const invite = await findInviteForEmails(emails, db)
+    if (!invite) return denyAndRemember('no-matching-invite')
+
+    const outcome = await claimInvite({ email: invite.email, did }, db)
+    if (outcome === 'collision') return denyAndRemember('collision')
+    if (outcome === 'inactive') return denyAndRemember('inactive-tenant')
+    if (outcome === 'not-found') return denyAndRemember('invite-not-found')
+
+    // (6) Bound. Re-resolve FRESH so the returned TenantView reflects the new membership.
+    const resolved = await resolveTenant(consumer)
+    if (!resolved.ok) return denyAndRemember('post-claim-resolve-failed')
+    return c.json(toTenantView(resolved.tenant, allowedWorkflowsFor(resolved.tenant)))
   })
 
   /**
