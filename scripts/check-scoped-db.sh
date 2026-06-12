@@ -63,6 +63,13 @@ ALLOWLIST=(
   # import.meta.url like seed-tenants main()); touches only engine_tenant_invites
   # (+ the membership delete via tenants.ts). Exempt like invites.ts.
   "deprovision-invite.ts"
+  # roles.ts — the role/authz READ layer (admin-roles Wave A). Touches ONLY the three
+  # role-bearing tables: engine_superadmins, engine_tenant_members, engine_tenant_invites
+  # (superadmin membership, per-tenant role, the seat-count for the 5-cap, the per-tenant
+  # advisory lock). NOT an engine_runs-class tenant-DATA surface. A targeted grep test
+  # (roles-scope.test.ts) pins it to exactly those three tables so the broad allowlist
+  # exemption cannot hide an unscoped cross-tenant read.
+  "roles.ts"
 )
 
 # Raw-access patterns that must not appear in /v1 handler files.

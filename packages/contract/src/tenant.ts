@@ -19,6 +19,15 @@ export const tenantBrandingSchema = z.object({
 export type TenantBranding = z.infer<typeof tenantBrandingSchema>
 
 /**
+ * The per-user role WITHIN a tenant (admin-roles Wave A / D1) — mirrors the
+ * `member_role` pg enum. `admin` manages the team (invites + the 5-seat cap);
+ * `member` is a plain team member. Platform superadmin is a SEPARATE cross-tenant
+ * dimension (`isSuperadmin`), not a value here.
+ */
+export const memberRoleSchema = z.enum(['admin', 'member'])
+export type MemberRole = z.infer<typeof memberRoleSchema>
+
+/**
  * `GET /v1/tenants/me` response (PR2). The shared, safe projection of a tenant
  * registry row that the SPA renders:
  *
@@ -41,6 +50,12 @@ export const tenantViewSchema = z.object({
   locale: z.string(),
   branding: tenantBrandingSchema,
   allowedWorkflows: z.array(z.string()),
+  // admin-roles Wave A (D3/Codex#13): ADDITIVE, optional, backward-compatible. The
+  // caller's resolved role in THIS tenant + whether they are a platform superadmin,
+  // so the SPA can adapt the Settings → Team panel. Optional so existing TenantView
+  // producers/consumers (and the wire shape before this wave) stay valid.
+  role: memberRoleSchema.optional(),
+  isSuperadmin: z.boolean().optional(),
 })
 export type TenantView = z.infer<typeof tenantViewSchema>
 
@@ -61,6 +76,9 @@ export type InviteStatus = z.infer<typeof inviteStatusSchema>
 export const inviteViewSchema = z.object({
   email: z.string(),
   status: inviteStatusSchema,
+  // admin-roles Wave A (D2): the role this invite grants on claim. Required — every
+  // invite row now carries a role (DB default 'member').
+  role: memberRoleSchema,
   claimedByDid: z.string().nullable(),
   claimedAt: z.string().nullable(),
 })
@@ -71,3 +89,40 @@ export const inviteListResponseSchema = z.object({
   invites: z.array(inviteViewSchema),
 })
 export type InviteListResponse = z.infer<typeof inviteListResponseSchema>
+
+/**
+ * A tenant MEMBER as projected to a tenant-admin/superadmin (admin-roles Wave A). The
+ * DID + its role within the tenant. Identity beyond the DID (names/emails) is deferred.
+ */
+export const memberViewSchema = z.object({
+  did: z.string(),
+  role: memberRoleSchema,
+})
+export type MemberView = z.infer<typeof memberViewSchema>
+
+/**
+ * The tenant TEAM view (admin-roles Wave A) — the invites roster + the bound members,
+ * for the Settings → Team panel.
+ */
+export const teamViewSchema = z.object({
+  invites: z.array(inviteViewSchema),
+  members: z.array(memberViewSchema),
+})
+export type TeamView = z.infer<typeof teamViewSchema>
+
+/**
+ * A single tenant in the superadmin tenant PICKER (admin-roles Wave A) — the minimal
+ * identity a superadmin needs to choose which tenant to manage. No secrets/config.
+ */
+export const tenantListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: tenantStatusSchema,
+})
+export type TenantListItem = z.infer<typeof tenantListItemSchema>
+
+/** `GET /v1/superadmin/tenants` response — the superadmin's tenant list. */
+export const tenantListResponseSchema = z.object({
+  tenants: z.array(tenantListItemSchema),
+})
+export type TenantListResponse = z.infer<typeof tenantListResponseSchema>

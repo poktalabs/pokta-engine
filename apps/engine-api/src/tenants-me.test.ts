@@ -96,12 +96,34 @@ vi.mock('@godin-engine/db', () => {
   // Pull the queried DID out of an `eq(M.did, did)` where-marker.
   const didFrom = (pred: { eq?: [string, string] }): string | undefined =>
     pred?.eq?.[0] === 'M.did' ? pred.eq[1] : undefined
+  // Read a tagged column's value out of an eq-marker.
+  const eqVal = (m: unknown, col: string): string | undefined => {
+    const w = m as { eq?: [unknown, unknown] }
+    return w?.eq && w.eq[0] === col ? (w.eq[1] as string) : undefined
+  }
+  // Pull (tenant_id, did) out of an and([eq,eq]) marker (tenantRoleOf where).
+  const andPairMember = (m: unknown): { tenantId?: string; did?: string } => {
+    const w = m as { and?: unknown[] }
+    const out: { tenantId?: string; did?: string } = {}
+    for (const part of w?.and ?? []) {
+      const t = eqVal(part, 'M.tenant_id')
+      if (t != null) out.tenantId = t
+      const d = eqVal(part, 'M.did')
+      if (d != null) out.did = d
+    }
+    return out
+  }
   const db = {
     query: {
       engineTenants: { findFirst },
     },
-    // findTenantByMember: select().from(M).innerJoin(T,...).where(eq(M.did,did)).limit(n)
-    select: () => ({
+    // Two select shapes are serviced:
+    //  - findTenantByMember: select().from(M).innerJoin(T,...).where(eq(M.did,did)).limit(n)
+    //  - roles.ts (admin-roles Wave A): isSuperadmin/tenantRoleOf read via
+    //    select(cols).from(S|M).where(...).limit(1) — NO innerJoin. The members fixture
+    //    has no per-member role here, so tenantRoleOf resolves the role as 'member'
+    //    (or null when not a member); engine_superadmins is empty → isSuperadmin false.
+    select: (cols?: Record<string, unknown>) => ({
       from: () => ({
         innerJoin: () => ({
           where: (pred: { eq?: [string, string] }) => ({
@@ -113,6 +135,27 @@ vi.mock('@godin-engine/db', () => {
             },
           }),
         }),
+        // roles.ts where(...) — disambiguate by the projected columns.
+        where: (pred: unknown) => {
+          const wantsRole = !!cols && 'role' in cols
+          const wantsDid = !!cols && 'did' in cols
+          const run = async () => {
+            if (wantsRole) {
+              // tenantRoleOf: membership row → 'member' if the DID is in members[].
+              const { tenantId, did } = andPairMember(pred)
+              const isMember = store.tenants.some(
+                (t) => t.tenantId === tenantId && did != null && t.members.includes(did),
+              )
+              return isMember ? [{ role: 'member' }] : []
+            }
+            if (wantsDid) {
+              // isSuperadmin: engine_superadmins is empty in this fixture → no rows.
+              return []
+            }
+            return []
+          }
+          return Object.assign(run, { limit: async (_n: number) => run() })
+        },
       }),
     }),
   }
@@ -120,7 +163,8 @@ vi.mock('@godin-engine/db', () => {
     db,
     schema: {
       engineTenants: { tenantId: 'tenant_id' },
-      engineTenantMembers: { tenantId: 'M.tenant_id', did: 'M.did' },
+      engineTenantMembers: { tenantId: 'M.tenant_id', did: 'M.did', role: 'M.role' },
+      engineSuperadmins: { did: 'S.did' },
     },
   }
 })
