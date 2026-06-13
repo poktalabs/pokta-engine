@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
 import { listManifests } from '@godin-engine/workflows'
-import type { TenantView, TenantStatus } from '@godin-engine/contract'
+import type { TenantView, TenantStatus, MemberRole } from '@godin-engine/contract'
 
 /**
  * The tenant REGISTRY accessor (PR2) — the single read path for `engine_tenants`,
@@ -77,6 +77,23 @@ export async function getTenant(
 }
 
 /**
+ * listTenants(db) — the registry rows for the superadmin tenant PICKER (admin-roles
+ * Wave A). Returns the minimal `{ tenantId, name, status }` identity for every tenant,
+ * ordered by name. NOT cached (the picker is a superadmin-only, low-frequency surface);
+ * exposes no secrets/config. tenants.ts is the allowlisted engine_tenants reader.
+ */
+export async function listTenants(
+  db: DbLike = defaultDb,
+): Promise<Array<{ tenantId: string; name: string; status: TenantStatus }>> {
+  const T = schema.engineTenants
+  const rows = (await db
+    .select({ tenantId: T.tenantId, name: T.name, status: T.status })
+    .from(T)
+    .orderBy(T.name)) as Array<{ tenantId: string; name: string; status: TenantStatus }>
+  return rows
+}
+
+/**
  * findTenantByMember(did) — resolve the tenant a Privy principal acts as: the
  * (unique) tenant whose `engine_tenant_members` carries this DID. NOT cached by DID
  * (the membership read is cheap, and DID→tenant must reflect membership edits
@@ -136,22 +153,26 @@ function isDidUniqueViolation(e: unknown): boolean {
 }
 
 /**
- * addTenantMember(tenantId, did, db, source?) — bind a DID to a tenant, INSERT-ONLY.
- * `ON CONFLICT (tenant_id, did) DO NOTHING` makes re-adding the SAME (tenant, did)
- * an idempotent no-op. A `UNIQUE(did)` violation (the DID is already a member of
- * ANOTHER tenant) surfaces as a typed `MemberDidCollisionError` so the caller can
- * map it to a collision; any other DB error propagates unchanged.
+ * addTenantMember(tenantId, did, db, source?, role?) — bind a DID to a tenant,
+ * INSERT-ONLY. `ON CONFLICT (tenant_id, did) DO NOTHING` makes re-adding the SAME
+ * (tenant, did) an idempotent no-op (it does NOT overwrite the existing role — a role
+ * change on an already-bound member goes through setMemberRole). A `UNIQUE(did)`
+ * violation (the DID is already a member of ANOTHER tenant) surfaces as a typed
+ * `MemberDidCollisionError` so the caller can map it to a collision; any other DB
+ * error propagates unchanged. `role` (admin-roles Wave A) defaults to 'member'; the
+ * claim path passes the invite's role through (D2).
  */
 export async function addTenantMember(
   tenantId: string,
   did: string,
   db: DbLike = defaultDb,
   source: string | null = null,
+  role: MemberRole = 'member',
 ): Promise<void> {
   try {
     await db
       .insert(schema.engineTenantMembers)
-      .values({ tenantId, did, source })
+      .values({ tenantId, did, source, role })
       .onConflictDoNothing({
         target: [schema.engineTenantMembers.tenantId, schema.engineTenantMembers.did],
       })
@@ -159,6 +180,56 @@ export async function addTenantMember(
     if (isDidUniqueViolation(e)) throw new MemberDidCollisionError(did)
     throw e
   }
+}
+
+/**
+ * The typed outcome of a setMemberRole call (admin-roles Wave A):
+ *   - `'ok'`            — the member's role was updated (or already at the target),
+ *   - `'not-a-member'`  — no membership row for (tenantId, did) — nothing to change,
+ *   - `'last-admin'`    — refused: demoting this member would leave the tenant with
+ *                         ZERO admins (the route maps this to 409 APPROVAL_DENIED).
+ */
+export type SetMemberRoleOutcome = 'ok' | 'not-a-member' | 'last-admin'
+
+/**
+ * setMemberRole(tenantId, did, role, db) — promote/demote an EXISTING member
+ * (admin-roles Wave A, superadmin-only at the route). In ONE transaction: count the
+ * tenant's current admins under the row's scope; if this would DEMOTE the tenant's
+ * ONLY admin (role !== 'admin' AND the target is currently the sole admin) refuse
+ * with `'last-admin'` (no lockout — D8). Otherwise UPDATE the member row's role. A
+ * missing membership row → `'not-a-member'` (the route maps it to the same anti-enum
+ * APPROVAL_DENIED). Promotions and no-op same-role writes always pass.
+ */
+export async function setMemberRole(
+  tenantId: string,
+  did: string,
+  role: MemberRole,
+  db: DbLike = defaultDb,
+): Promise<SetMemberRoleOutcome> {
+  const M = schema.engineTenantMembers
+  return db.transaction(async (tx) => {
+    const current = (await tx
+      .select({ did: M.did, role: M.role })
+      .from(M)
+      .where(eq(M.tenantId, tenantId))) as Array<{ did: string; role: MemberRole }>
+
+    const target = current.find((m) => m.did === did)
+    if (!target) return 'not-a-member' as const
+
+    // LAST-ADMIN guard (no lockout): block a demotion that empties the admin set.
+    if (target.role === 'admin' && role !== 'admin') {
+      const adminCount = current.filter((m) => m.role === 'admin').length
+      if (adminCount <= 1) return 'last-admin' as const
+    }
+
+    if (target.role !== role) {
+      await tx
+        .update(M)
+        .set({ role })
+        .where(and(eq(M.tenantId, tenantId), eq(M.did, did)))
+    }
+    return 'ok' as const
+  })
 }
 
 /** removeTenantMember(tenantId, did, db) — delete the membership row (idempotent). */

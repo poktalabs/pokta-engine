@@ -13,12 +13,15 @@ import type {
   IntegrationStatus,
   InviteView,
   InviteListResponse,
+  MemberRole,
+  TenantListResponse,
 } from '@godin-engine/contract'
 import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
 import { consumerAuth, type AuthOptions, type Consumer } from './auth'
 import { forConsumer, resolveTenant, claimThrottle, CLAIM_THROTTLE_PER_DAY } from './scoped-db'
-import { allowedWorkflowsFor, toTenantView, type TenantRow } from './tenants'
+import { allowedWorkflowsFor, toTenantView, setMemberRole, listTenants, type TenantRow } from './tenants'
 import { findInviteForEmails, claimInvite, addInvite, listInvites } from './invites'
+import { isSuperadmin, tenantRoleOf } from './roles'
 import { deprovisionInvite } from './deprovision-invite'
 import {
   buildDefaultPrivyEmailResolver,
@@ -58,6 +61,58 @@ async function enqueue(runId: string): Promise<void> {
 
 function fail(c: Context, err: EngineError) {
   return c.json({ error: err.toEnvelope() }, err.httpStatus as ContentfulStatusCode)
+}
+
+/**
+ * Parse a request-body `role` (admin-roles Wave A). `undefined`/absent → 'member'
+ * (the default); 'admin'/'member' → that role; anything else → `null` (invalid →
+ * the route returns 400). Does NOT authorize — admin-grant authorization is a
+ * separate check (only a superadmin may pass 'admin').
+ */
+function parseRole(raw: unknown): MemberRole | null {
+  if (raw === undefined || raw === null) return 'member'
+  if (raw === 'admin' || raw === 'member') return raw
+  return null
+}
+
+/**
+ * The SINGLE fixed message every role-authz failure returns (anti-enum, §8). A
+ * tenant-admin probing another tenant's :tenantId, a member forcing the panel, a
+ * non-superadmin hitting a superadmin route — all get the BYTE-IDENTICAL
+ * APPROVAL_DENIED so nothing about tenant existence or membership leaks. Mapped to
+ * 403 by ERROR_HTTP_STATUS[APPROVAL_DENIED].
+ */
+const AUTHZ_DENIED_MESSAGE = 'not authorized'
+
+/** The DID for a privy consumer, or '' for non-privy (which can never be admin/superadmin). */
+function consumerDid(consumer: Consumer): string {
+  return consumer.mode === 'privy' ? (consumer.identity ?? '') : ''
+}
+
+/**
+ * requireTenantAdmin(consumer, tenantId) — pass iff the caller is a platform
+ * superadmin OR a tenant member with role 'admin' IN `tenantId`. AUTHORIZES BEFORE
+ * any tenant existence lookup (Codex#12: no 404-vs-403 / timing leak). Returns null
+ * on success, or the single anti-enum APPROVAL_DENIED EngineError on failure.
+ */
+async function requireTenantAdmin(consumer: Consumer, tenantId: string): Promise<EngineError | null> {
+  const did = consumerDid(consumer)
+  if (!did) return new EngineError('APPROVAL_DENIED', AUTHZ_DENIED_MESSAGE)
+  if (await isSuperadmin(did, db)) return null
+  const role = await tenantRoleOf(tenantId, did, db)
+  if (role === 'admin') return null
+  return new EngineError('APPROVAL_DENIED', AUTHZ_DENIED_MESSAGE)
+}
+
+/**
+ * requireSuperadmin(consumer) — pass iff the caller is a platform superadmin. Returns
+ * null on success, or the single anti-enum APPROVAL_DENIED EngineError on failure.
+ */
+async function requireSuperadmin(consumer: Consumer): Promise<EngineError | null> {
+  const did = consumerDid(consumer)
+  if (!did) return new EngineError('APPROVAL_DENIED', AUTHZ_DENIED_MESSAGE)
+  if (await isSuperadmin(did, db)) return null
+  return new EngineError('APPROVAL_DENIED', AUTHZ_DENIED_MESSAGE)
 }
 
 /**
@@ -153,12 +208,14 @@ const TENANT_UNKNOWN_MESSAGE = 'principal maps to no active tenant'
 function toInviteView(row: {
   email: string
   status: 'pending' | 'claimed' | 'revoked'
+  role: MemberRole
   claimedByDid: string | null
   claimedAt: Date | null
 }): InviteView {
   return {
     email: row.email,
     status: row.status,
+    role: row.role,
     claimedByDid: row.claimedByDid,
     claimedAt: row.claimedAt ? row.claimedAt.toISOString() : null,
   }
@@ -178,7 +235,7 @@ function toInviteView(row: {
 function mountAdminInvites(app: Hono): void {
   app.post('/admin/tenants/:tenantId/invites', async (c) => {
     const tenantId = c.req.param('tenantId')
-    const body = (await c.req.json().catch(() => null)) as { email?: unknown } | null
+    const body = (await c.req.json().catch(() => null)) as { email?: unknown; role?: unknown } | null
     const rawEmail = body?.email
     if (typeof rawEmail !== 'string' || !rawEmail.trim()) {
       return fail(c, new EngineError('ARGS_INVALID', 'body.email is required'))
@@ -189,11 +246,19 @@ function mountAdminInvites(app: Hono): void {
     } catch {
       return fail(c, new EngineError('ARGS_INVALID', 'body.email is not a valid email address'))
     }
+    // Operator break-glass MAY grant any role (it is the privileged invariant-bypass
+    // path, §8). Defaults to 'member'; an invalid role string → 400.
+    const role = parseRole(body?.role)
+    if (role === null) {
+      return fail(c, new EngineError('ARGS_INVALID', "body.role must be 'admin' or 'member'"))
+    }
 
     let outcome
     try {
-      outcome = await addInvite(tenantId, email, db)
+      // invitedByDid=null: the operator key is a machine secret, not a DID actor.
+      outcome = await addInvite(tenantId, email, role, null, db)
     } catch (e) {
+      if (e instanceof EngineError && e.code === 'TEAM_FULL') return fail(c, e)
       // A non-existent tenant trips the FK on insert — surface a clean 404, not a 500.
       if (isForeignKeyViolation(e)) {
         return fail(c, new EngineError('SKILL_NOT_FOUND', `tenant '${tenantId}' not found`))
@@ -289,7 +354,17 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
       return fail(c, new EngineError('TENANT_UNKNOWN', 'principal maps to no active tenant'))
     }
     const view = toTenantView(resolved.tenant, allowedWorkflowsFor(resolved.tenant))
-    return c.json(view)
+    // admin-roles Wave A (Codex#13): ADDITIVE role + isSuperadmin so the SPA adapts
+    // the Team panel. Resolved fresh per request via the allowlisted roles.ts. A
+    // service principal (no DID) is neither a tenant member nor a superadmin.
+    const did = consumerDid(consumer)
+    const role = did ? await tenantRoleOf(tenantId, did, db) : null
+    const superadmin = did ? await isSuperadmin(did, db) : false
+    return c.json({
+      ...view,
+      ...(role ? { role } : {}),
+      isSuperadmin: superadmin,
+    })
   })
 
   /**
@@ -377,6 +452,134 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
     const resolved = await resolveTenant(consumer)
     if (!resolved.ok) return denyAndRemember('post-claim-resolve-failed')
     return c.json(toTenantView(resolved.tenant, allowedWorkflowsFor(resolved.tenant)))
+  })
+
+  // ── admin-roles Wave A — JWT/role-gated team management (under /v1 consumerAuth) ──
+  // Every authz failure returns the SAME anti-enum APPROVAL_DENIED (403/409 per code).
+  // Authorization runs BEFORE any tenant/invite existence lookup (Codex#12). NO raw
+  // db — all DB goes through roles.ts / invites.ts / tenants.ts / deprovision-invite.
+
+  /** GET /v1/tenants/:tenantId/invites — requireTenantAdmin → the tenant's team roster. */
+  app.get('/v1/tenants/:tenantId/invites', async (c) => {
+    const consumer = c.get('consumer')
+    const tenantId = c.req.param('tenantId')
+    const denied = await requireTenantAdmin(consumer, tenantId)
+    if (denied) return fail(c, denied)
+    const rows = await listInvites(tenantId, db)
+    const invites = rows.map(toInviteView)
+    return c.json({ invites } satisfies InviteListResponse)
+  })
+
+  /**
+   * POST /v1/tenants/:tenantId/invites { email, role? } — requireTenantAdmin. REJECT
+   * (not coerce, Codex#17): a non-superadmin passing role:'admin' → APPROVAL_DENIED
+   * (403). Only a superadmin may grant 'admin'. Seat cap → TEAM_FULL (409). An email
+   * active for another tenant → a GENERIC failure (no leak, Codex#6/#18).
+   */
+  app.post('/v1/tenants/:tenantId/invites', async (c) => {
+    const consumer = c.get('consumer')
+    const tenantId = c.req.param('tenantId')
+    const denied = await requireTenantAdmin(consumer, tenantId)
+    if (denied) return fail(c, denied)
+
+    const body = (await c.req.json().catch(() => null)) as { email?: unknown; role?: unknown } | null
+    const rawEmail = body?.email
+    if (typeof rawEmail !== 'string' || !rawEmail.trim()) {
+      return fail(c, new EngineError('ARGS_INVALID', 'body.email is required'))
+    }
+    const email = rawEmail.trim().toLowerCase()
+    try {
+      validateInviteEmails([email])
+    } catch {
+      return fail(c, new EngineError('ARGS_INVALID', 'body.email is not a valid email address'))
+    }
+    const role = parseRole(body?.role)
+    if (role === null) {
+      return fail(c, new EngineError('ARGS_INVALID', "body.role must be 'admin' or 'member'"))
+    }
+    // Reject-don't-coerce: only a superadmin may grant 'admin'. A tenant-admin asking
+    // for 'admin' gets the SAME anti-enum denial (never a silent member-invite).
+    if (role === 'admin') {
+      const did = consumerDid(consumer)
+      if (!(await isSuperadmin(did, db))) {
+        return fail(c, new EngineError('APPROVAL_DENIED', AUTHZ_DENIED_MESSAGE))
+      }
+    }
+
+    let outcome
+    try {
+      outcome = await addInvite(tenantId, email, role, consumerDid(consumer) || null, db)
+    } catch (e) {
+      if (e instanceof EngineError && e.code === 'TEAM_FULL') return fail(c, e)
+      if (isForeignKeyViolation(e)) {
+        // A non-existent tenant: an authorized superadmin gets a clean 404; this never
+        // fires for a tenant-admin (they only pass requireTenantAdmin for a tenant they
+        // are a member of, which exists).
+        return fail(c, new EngineError('SKILL_NOT_FOUND', `tenant '${tenantId}' not found`))
+      }
+      throw e
+    }
+    if (outcome === 'conflict-other-tenant') {
+      // GENERIC envelope — never leak the email, the index, or the other tenant.
+      return c.json(
+        { error: new EngineError('APPROVAL_DENIED', 'email is not available').toEnvelope() },
+        409,
+      )
+    }
+    return c.json({ email, role, outcome })
+  })
+
+  /** DELETE /v1/tenants/:tenantId/invites/:email — requireTenantAdmin → deprovision. */
+  app.delete('/v1/tenants/:tenantId/invites/:email', async (c) => {
+    const consumer = c.get('consumer')
+    const tenantId = c.req.param('tenantId')
+    const denied = await requireTenantAdmin(consumer, tenantId)
+    if (denied) return fail(c, denied)
+    const email = decodeURIComponent(c.req.param('email')).trim().toLowerCase()
+    const result = await deprovisionInvite(tenantId, email, db)
+    return c.json(result)
+  })
+
+  /**
+   * PATCH /v1/tenants/:tenantId/members/:did { role } — requireSuperadmin. Promote/
+   * demote an already-bound member (Codex#1: a CLAIMED member can't be made admin via
+   * an invite). Last-admin guard → 409 APPROVAL_DENIED. A non-member or wrong tenant →
+   * the SAME anti-enum APPROVAL_DENIED (no existence leak).
+   */
+  app.patch('/v1/tenants/:tenantId/members/:did', async (c) => {
+    const consumer = c.get('consumer')
+    const denied = await requireSuperadmin(consumer)
+    if (denied) return fail(c, denied)
+    const tenantId = c.req.param('tenantId')
+    const targetDid = decodeURIComponent(c.req.param('did'))
+    const body = (await c.req.json().catch(() => null)) as { role?: unknown } | null
+    if (body?.role !== 'admin' && body?.role !== 'member') {
+      return fail(c, new EngineError('ARGS_INVALID', "body.role must be 'admin' or 'member'"))
+    }
+    const role = body.role as MemberRole
+    const result = await setMemberRole(tenantId, targetDid, role, db)
+    if (result === 'last-admin') {
+      // No lockout: can't demote the tenant's only admin.
+      return c.json(
+        { error: new EngineError('APPROVAL_DENIED', 'cannot demote the last admin').toEnvelope() },
+        409,
+      )
+    }
+    if (result === 'not-a-member') {
+      // Anti-enum: indistinguishable from an unauthorized probe.
+      return fail(c, new EngineError('APPROVAL_DENIED', AUTHZ_DENIED_MESSAGE))
+    }
+    return c.json({ tenantId, did: targetDid, role })
+  })
+
+  /** GET /v1/superadmin/tenants — requireSuperadmin → the tenant picker list. */
+  app.get('/v1/superadmin/tenants', async (c) => {
+    const consumer = c.get('consumer')
+    const denied = await requireSuperadmin(consumer)
+    if (denied) return fail(c, denied)
+    const rows = await listTenants(db)
+    const tenants = rows.map((t) => ({ id: t.tenantId, name: t.name, status: t.status }))
+    return c.json({ tenants } satisfies TenantListResponse)
   })
 
   /**

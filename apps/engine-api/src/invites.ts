@@ -1,6 +1,12 @@
 import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import { db as defaultDb, schema } from '@godin-engine/db'
+import { EngineError } from '@godin-engine/contract'
+import type { MemberRole } from '@godin-engine/contract'
 import { addTenantMember, getTenant, isActive, MemberDidCollisionError } from './tenants'
+import { seatCount, withTenantSeatLock } from './roles'
+
+/** The per-tenant SEAT cap (admin-roles Wave A / D3): members + pending invites ≤ 5. */
+export const TEAM_SEAT_CAP = 5
 
 /**
  * The invite ACCESSOR (Wave 1) — the single raw path for `engine_tenant_invites`.
@@ -126,7 +132,7 @@ export async function claimInvite(
     return await db.transaction(async (tx) => {
       // Lock the invite row so two concurrent claims serialize on it.
       const locked = (await tx.execute(
-        sql`select tenant_id, email, status, claimed_by_did
+        sql`select tenant_id, email, status, claimed_by_did, role
             from engine_tenant_invites
             where email = ${normalizedEmail} and status != 'revoked'
             for update`,
@@ -135,6 +141,7 @@ export async function claimInvite(
         email: string
         status: string
         claimed_by_did: string | null
+        role: MemberRole | null
       }>
 
       const invite = locked[0]
@@ -165,11 +172,13 @@ export async function claimInvite(
         })
         .where(and(eq(V.tenantId, tenantId), eq(V.email, normalizedEmail)))
 
-      // Bind the DID into the tenant. A cross-tenant UNIQUE(did) violation throws
+      // Bind the DID into the tenant WITH the invite's role (D2) — claim grants the
+      // role the invite carried. A cross-tenant UNIQUE(did) violation throws
       // MemberDidCollisionError → we rethrow to roll the whole tx back (the claim
       // is undone) and map it to 'collision' below.
+      const grantRole: MemberRole = invite.role ?? 'member'
       try {
-        await addTenantMember(tenantId, did, tx as unknown as DbLike, 'claim')
+        await addTenantMember(tenantId, did, tx as unknown as DbLike, 'claim', grantRole)
       } catch (e) {
         if (e instanceof MemberDidCollisionError) throw new ClaimCollisionRollback(tenantId)
         throw e
@@ -184,21 +193,33 @@ export async function claimInvite(
 }
 
 /**
- * addInvite(tenantId, email, db) — operator-gated upsert of a `pending` invite
- * (Wave 3). Lowercases + trims the email. In ONE transaction, reads the current
- * (tenant_id, email) row (same table) and acts on its status:
- *   - no row → INSERT `pending` → `'added'`,
- *   - `revoked` → UPDATE back to `pending` (+ updated_at) → `'reactivated'`,
- *   - `pending` → no-op → `'already-pending'`,
+ * addInvite(tenantId, email, role, invitedByDid, db) — upsert a `pending` invite
+ * (admin-roles Wave A; previously operator-gated Wave 3, now also the JWT/role route).
+ * Lowercases + trims the email. In ONE transaction — under a per-tenant advisory seat
+ * lock (`withTenantSeatLock`) so concurrent adds serialize and the cap can't be
+ * exceeded — reads the current (tenant_id, email) row (same table) and acts on status:
+ *
+ *   - no row → SEAT CAP CHECK (seats ≥ TEAM_SEAT_CAP → throw TEAM_FULL) then INSERT
+ *     `pending` with `role` + `invited_by_did` → `'added'`,
+ *   - `revoked` → SEAT CAP CHECK then reactivate to `pending`, setting the NEW `role`
+ *     + `invited_by_did` (a reactivation is effectively a fresh invite) → `'reactivated'`,
+ *   - `pending` → no-op → `'already-pending'` (PENDING-INVITE IMMUTABILITY, Codex#4:
+ *     the existing row's role is NEVER changed here; a role change is a superadmin
+ *     DELETE + re-POST, or a PATCH after claim),
  *   - `claimed` → LEFT AS IS (never un-claim → never orphan the member) → `'already-claimed'`.
- * An INSERT/UPDATE that activates an email already ACTIVE for ANOTHER tenant trips
- * the partial unique index (23505) → caught → `'conflict-other-tenant'` (not a 500).
- * The tenant FK is enforced on INSERT; a non-existent tenant rejects there (the
- * route surfaces it as a clean error, not a raw 500).
+ *
+ * The seat cap is checked only on the paths that CONSUME a new pending seat (added /
+ * reactivated); already-pending/already-claimed are no-ops and never blocked, so an
+ * over-cap tenant can still idempotently re-touch existing rows. An INSERT/UPDATE that
+ * activates an email already ACTIVE for ANOTHER tenant trips the partial unique index
+ * (23505) → caught → `'conflict-other-tenant'` (not a 500). The tenant FK is enforced
+ * on INSERT; a non-existent tenant rejects there (the route surfaces a clean error).
  */
 export async function addInvite(
   tenantId: string,
   email: string,
+  role: MemberRole,
+  invitedByDid: string | null,
   db: DbLike = defaultDb,
 ): Promise<AdminInviteOutcome> {
   const normalizedEmail = email.trim().toLowerCase()
@@ -206,25 +227,39 @@ export async function addInvite(
 
   try {
     return await db.transaction(async (tx) => {
-      const existing = (await tx
-        .select()
-        .from(V)
-        .where(and(eq(V.tenantId, tenantId), eq(V.email, normalizedEmail)))
-        .limit(1)) as InviteRow[]
+      const txDb = tx as unknown as DbLike
+      // Per-tenant advisory lock (Codex#9): serialize seat-consuming adds for this
+      // tenant so a check-then-insert race can't exceed the cap.
+      return withTenantSeatLock(tenantId, txDb, async () => {
+        const existing = (await tx
+          .select()
+          .from(V)
+          .where(and(eq(V.tenantId, tenantId), eq(V.email, normalizedEmail)))
+          .limit(1)) as InviteRow[]
 
-      const row = existing[0]
-      if (!row) {
-        await tx.insert(V).values({ tenantId, email: normalizedEmail, status: 'pending' })
-        return 'added' as const
-      }
-      if (row.status === 'pending') return 'already-pending' as const
-      if (row.status === 'claimed') return 'already-claimed' as const
-      // status === 'revoked' → reactivate to pending.
-      await tx
-        .update(V)
-        .set({ status: 'pending', updatedAt: sql`now()` })
-        .where(and(eq(V.tenantId, tenantId), eq(V.email, normalizedEmail)))
-      return 'reactivated' as const
+        const row = existing[0]
+        if (!row) {
+          // Seat cap (D3) BEFORE inserting — count under the lock so it's race-safe.
+          if ((await seatCount(tenantId, txDb)) >= TEAM_SEAT_CAP) {
+            throw new EngineError('TEAM_FULL', `team is full (max ${TEAM_SEAT_CAP} seats)`)
+          }
+          await tx
+            .insert(V)
+            .values({ tenantId, email: normalizedEmail, status: 'pending', role, invitedByDid })
+          return 'added' as const
+        }
+        if (row.status === 'pending') return 'already-pending' as const
+        if (row.status === 'claimed') return 'already-claimed' as const
+        // status === 'revoked' → reactivate to pending (a fresh seat → cap-checked).
+        if ((await seatCount(tenantId, txDb)) >= TEAM_SEAT_CAP) {
+          throw new EngineError('TEAM_FULL', `team is full (max ${TEAM_SEAT_CAP} seats)`)
+        }
+        await tx
+          .update(V)
+          .set({ status: 'pending', role, invitedByDid, updatedAt: sql`now()` })
+          .where(and(eq(V.tenantId, tenantId), eq(V.email, normalizedEmail)))
+        return 'reactivated' as const
+      })
     })
   } catch (e) {
     // Email already ACTIVE for another tenant (partial unique index) → 409, not 500.

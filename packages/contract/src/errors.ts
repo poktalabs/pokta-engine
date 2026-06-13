@@ -18,6 +18,9 @@ export const ERROR_CODES = [
   // verified principal resolves to no known tenant (reserved for PR2's registry).
   'UNAUTHENTICATED',
   'TENANT_UNKNOWN',
+  // admin-roles Wave A (D3): the per-tenant 5-SEAT cap is full — raised at INVITE
+  // time when seats (member rows + pending invites) are already ≥ 5. Maps to 409.
+  'TEAM_FULL',
 ] as const
 
 export const errorCodeSchema = z.enum(ERROR_CODES)
@@ -41,6 +44,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   APPROVAL_DENIED: 403,
   UNAUTHENTICATED: 401,
   TENANT_UNKNOWN: 403,
+  TEAM_FULL: 409,
 }
 
 export class EngineError extends Error {

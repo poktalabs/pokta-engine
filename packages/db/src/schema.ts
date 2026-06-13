@@ -131,6 +131,15 @@ export const engineWorkflowState = pgTable(
  */
 export const tenantStatus = pgEnum('tenant_status', ['active', 'pending', 'disabled'])
 
+/**
+ * The per-user ROLE within a tenant (admin-roles Wave A / D1, D2). A platform
+ * SUPERADMIN is a SEPARATE, cross-tenant grant (engine_superadmins) — NOT a value
+ * here. Within a tenant a member is either an `admin` (manages the team: invites,
+ * the 5-seat cap) or a plain `member`. An invite carries the role to GRANT on claim
+ * (D2): claim binds the member with the invite's role.
+ */
+export const memberRole = pgEnum('member_role', ['admin', 'member'])
+
 export const engineTenants = pgTable(
   'engine_tenants',
   {
@@ -181,6 +190,11 @@ export const engineTenantMembers = pgTable(
       .references(() => engineTenants.tenantId, { onDelete: 'cascade' }),
     did: text('did').notNull(),
     source: text('source'),
+    // The member's role WITHIN this tenant (admin-roles Wave A / D1). Defaults to
+    // 'member' so every existing membership row backfills as a plain member; promote
+    // to 'admin' is an explicit superadmin action (setMemberRole). NOT cross-tenant —
+    // platform superadmin lives in engine_superadmins.
+    role: memberRole('role').notNull().default('member'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -188,6 +202,20 @@ export const engineTenantMembers = pgTable(
     uniqueIndex('tenant_members_did_unique').on(t.did),
   ],
 )
+
+/**
+ * Platform SUPERADMINS (admin-roles Wave A / D4) — the cross-tenant role dimension.
+ * A DID with a row here is a platform superadmin: it passes requireTenantAdmin for
+ * EVERY tenant and may grant the `admin` role on an invite, INDEPENDENT of any
+ * tenant membership. ONE bootstrap DID is seeded once at deploy (insert-only, via the
+ * migration); thereafter the operator break-glass path (OPERATOR_KEY) is the
+ * documented recovery to add/fix a superadmin. Seats are NEVER read from this table
+ * (Codex#11) — a platform-only superadmin with no member row consumes no tenant seat.
+ */
+export const engineSuperadmins = pgTable('engine_superadmins', {
+  did: text('did').primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * Per-tenant integration CONNECTION status (P5b). The desired/actual wiring state
@@ -258,6 +286,12 @@ export const engineTenantInvites = pgTable(
       .references(() => engineTenants.tenantId, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     status: inviteStatus('status').notNull().default('pending'),
+    // The role to grant the member on claim (D2). Defaults to 'member' so existing
+    // rows backfill as plain members; only a superadmin may seed an 'admin' invite.
+    role: memberRole('role').notNull().default('member'),
+    // Minimal audit (Codex#15): which DID created this invite. Nullable so env/seed
+    // rows (no human actor) and pre-existing rows are valid.
+    invitedByDid: text('invited_by_did'),
     claimedByDid: text('claimed_by_did'),
     claimedAt: timestamp('claimed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -24,10 +24,12 @@ interface InviteRow {
   email: string
   status: 'pending' | 'claimed' | 'revoked'
   claimedByDid: string | null
+  role?: 'admin' | 'member'
 }
 interface MemberRow {
   tenantId: string
   did: string
+  role?: 'admin' | 'member'
 }
 const store: {
   invites: InviteRow[]
@@ -125,13 +127,13 @@ vi.mock('@godin-engine/db', () => {
         },
       }),
     }),
-    // addTenantMember(tx): insert(M).values({tenantId,did}).onConflictDoNothing(...)
+    // addTenantMember(tx): insert(M).values({tenantId,did,source,role}).onConflictDoNothing(...)
     insert: () => ({
       values: (v: MemberRow) => ({
         onConflictDoNothing: async () => {
           if (store.members.some((m) => m.tenantId === v.tenantId && m.did === v.did)) return
           if (store.members.some((m) => m.did === v.did)) throw new FakeUniqueViolation(v.did)
-          store.members.push({ tenantId: v.tenantId, did: v.did })
+          store.members.push({ tenantId: v.tenantId, did: v.did, role: v.role ?? 'member' })
         },
       }),
     }),
@@ -153,7 +155,7 @@ vi.mock('@godin-engine/db', () => {
       if (email === undefined) return []
       const inv = lockedInviteByEmail(email)
       return inv
-        ? [{ tenant_id: inv.tenantId, email: inv.email, status: inv.status, claimed_by_did: inv.claimedByDid }]
+        ? [{ tenant_id: inv.tenantId, email: inv.email, status: inv.status, claimed_by_did: inv.claimedByDid, role: inv.role ?? 'member' }]
         : []
     },
   })
@@ -234,7 +236,14 @@ describe('claimInvite — atomic bind, inactive gate, collision', () => {
     const out = await claimInvite({ email: 'a@b.co', did: 'did:privy:new' })
     expect(out).toEqual({ ok: true, tenantId: 'mi-pase' })
     expect(store.invites[0]).toMatchObject({ status: 'claimed', claimedByDid: 'did:privy:new' })
-    expect(store.members).toContainEqual({ tenantId: 'mi-pase', did: 'did:privy:new' })
+    expect(store.members).toContainEqual({ tenantId: 'mi-pase', did: 'did:privy:new', role: 'member' })
+  })
+
+  it('claim grants the INVITE\'s role to the bound member (D2)', async () => {
+    store.invites.push({ tenantId: 'mi-pase', email: 'a@b.co', status: 'pending', claimedByDid: null, role: 'admin' })
+    const out = await claimInvite({ email: 'a@b.co', did: 'did:privy:promoted' })
+    expect(out).toEqual({ ok: true, tenantId: 'mi-pase' })
+    expect(store.members).toContainEqual({ tenantId: 'mi-pase', did: 'did:privy:promoted', role: 'admin' })
   })
 
   it('same-did re-claim is an idempotent no-op success', async () => {
