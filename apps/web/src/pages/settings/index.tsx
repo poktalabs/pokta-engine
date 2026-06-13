@@ -4,16 +4,17 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { TenantProfilePanel } from '@/pages/settings/TenantProfilePanel'
 import { IntegrationStatusPanel } from '@/pages/settings/IntegrationStatusPanel'
-import { MemberRosterPanel } from '@/pages/settings/MemberRosterPanel'
+import { TeamPanel } from '@/pages/settings/TeamPanel'
 
 /**
  * Settings surface (P5b-wired) — READ-ONLY.
  *
  * The tenant PROFILE comes from the already-live TenantProvider
  * (`useTenantContext().view` : TenantView — GET /v1/tenants/me). There is NO
- * `/v1/settings` endpoint and NO write surface: the integration-status and team
- * panels are honest DEFERRED shells (ComingSoon), never fabricated rows and never
- * DIDs-rendered-as-emails.
+ * `/v1/settings` endpoint. The integration-status panel is an honest DEFERRED shell
+ * (ComingSoon). The TEAM panel (admin-roles Wave B) is now LIVE + role-adaptive
+ * against the Wave A role endpoints; it is cosmetic (the server re-checks every
+ * action) and renders no DIDs-as-emails.
  *
  * Graceful degradation (D3): the provider's loading / access-denied / error states
  * are surfaced cleanly rather than white-screening.
@@ -50,7 +51,7 @@ export default function Settings() {
       <div className="space-y-10">
         <TenantProfilePanel view={view} />
         <IntegrationStatusPanel basePath={basePath} />
-        <MemberRosterPanel />
+        <TeamPanel />
       </div>
     )
   }

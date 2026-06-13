@@ -109,7 +109,10 @@ describe('SETTINGS — profile renders from the live TenantView; roster is an ho
     expect(meCalls[0]?.headers.authorization).toBe('Bearer test-privy-jwt')
   })
 
-  it('renders the team roster as a deferred "coming soon" shell — NO fake rows, NO DIDs-as-emails', async () => {
+  it('renders the role-adaptive Team panel as a MEMBER (no role/isSuperadmin on the view) — one honest line, NO management UI, NO DIDs-as-emails', async () => {
+    // VINO_VIEW carries no `role`/`isSuperadmin` → the panel resolves to the MEMBER
+    // variant (role=null, isSuperadmin=false), which shows one honest line and NO
+    // management surface (no add input, no role toggle, no revoke).
     mockLivePath('GET', '/v1/tenants/me', { status: 200, body: VINO_VIEW })
     renderWithProviders(<SettingsGate />, { wrapInner: withRouter })
 
@@ -117,8 +120,15 @@ describe('SETTINGS — profile renders from the live TenantView; roster is an ho
       expect(screen.getByRole('heading', { name: 'Team' })).toBeInTheDocument(),
     )
 
-    // Honest deferred copy is present…
-    expect(screen.getByText('Team management coming soon')).toBeInTheDocument()
+    // The honest member line names the tenant and points to an admin.
+    expect(
+      screen.getByText(/contact an admin to manage members/i),
+    ).toBeInTheDocument()
+    // No management affordances leak into the member view.
+    expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText(/invite teammate by email/i),
+    ).not.toBeInTheDocument()
 
     // …and nothing that looks like a fabricated member row leaks through. The
     // engine only knows the human as an opaque Privy DID (did:privy:…); it must
