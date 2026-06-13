@@ -1,10 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type {
-  InviteListResponse,
-  MemberRole,
-  TenantListResponse,
+import {
+  type InviteListResponse,
+  type MemberRole,
+  type TenantListResponse,
+  inviteListResponseSchema,
+  tenantListResponseSchema,
 } from '@godin-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
+
+/**
+ * Validate a 200 body against the contract schema BEFORE it reaches React render.
+ * `apiFetch` does ZERO success-body validation (a bare `as T` cast), so a backend /
+ * proxy that returns a malformed-but-200 payload (a non-array `invites`, a row with a
+ * null `email`, an HTML body) would otherwise throw DURING render — e.g.
+ * `invites.filter is not a function` or `email.toLowerCase` on null — escaping the
+ * local LoadingState/ErrorState (which only fire on isPending/isError) and
+ * white-screening the whole Settings route. Surfacing a parse failure as a query
+ * ERROR routes it to the panel's ErrorState instead, so a bad shape degrades locally.
+ */
+function parsed<T>(schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false } }) {
+  return (raw: unknown): T => {
+    const result = schema.safeParse(raw)
+    if (!result.success) {
+      throw new ApiError(
+        {
+          code: 'SKILL_EXEC_ERROR',
+          message: 'The server returned an unexpected response.',
+          retryable: false,
+        },
+        200,
+      )
+    }
+    return result.data
+  }
+}
 
 /**
  * Settings → Team data hooks (admin-roles Wave B). TanStack Query against the
@@ -33,9 +62,9 @@ export function useTeam(tenantId: string | null) {
   return useQuery<InviteListResponse, ApiError>({
     queryKey: teamQueryKey(tenantId ?? ''),
     queryFn: () =>
-      apiFetch<InviteListResponse>(
+      apiFetch<unknown>(
         `/v1/tenants/${encodeURIComponent(tenantId as string)}/invites`,
-      ),
+      ).then(parsed<InviteListResponse>(inviteListResponseSchema)),
     // Only run once we know which tenant to read (a member has no tenant to manage).
     enabled: !!tenantId,
     retry: false,
@@ -46,7 +75,10 @@ export function useTeam(tenantId: string | null) {
 export function useTenants(enabled: boolean) {
   return useQuery<TenantListResponse, ApiError>({
     queryKey: TENANTS_QUERY_KEY,
-    queryFn: () => apiFetch<TenantListResponse>('/v1/superadmin/tenants'),
+    queryFn: () =>
+      apiFetch<unknown>('/v1/superadmin/tenants').then(
+        parsed<TenantListResponse>(tenantListResponseSchema),
+      ),
     enabled,
     retry: false,
   })

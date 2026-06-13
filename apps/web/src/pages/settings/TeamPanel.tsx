@@ -11,7 +11,6 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import {
   useInviteMember,
   useRevokeInvite,
-  useSetMemberRole,
   useTeam,
   useTenants,
 } from '@/pages/settings/use-team'
@@ -129,6 +128,7 @@ function ManagedTeam({ isSuperadmin }: ManagedTeamProps) {
         <TenantPicker
           tenants={tenantsQuery.data?.tenants ?? []}
           loading={tenantsQuery.isPending}
+          isError={tenantsQuery.isError}
           value={activeTenantId}
           onChange={setPickedTenantId}
         />
@@ -179,13 +179,14 @@ function ManagedTeam({ isSuperadmin }: ManagedTeamProps) {
 interface TenantPickerProps {
   tenants: { id: string; name: string }[]
   loading: boolean
+  isError: boolean
   value: string | null
   onChange: (id: string) => void
 }
 
-function TenantPicker({ tenants, loading, value, onChange }: TenantPickerProps) {
+function TenantPicker({ tenants, loading, isError, value, onChange }: TenantPickerProps) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <label
         htmlFor="team-tenant-picker"
         className="font-funnel text-xs uppercase tracking-wide text-[var(--muted-foreground)]"
@@ -213,6 +214,15 @@ function TenantPicker({ tenants, loading, value, onChange }: TenantPickerProps) 
           </option>
         ))}
       </select>
+      {/* The cross-tenant list failing (a 403 from the server disagreeing on
+          isSuperadmin, or a network blip) must not silently present an empty/self-only
+          picker as the authoritative tenant set — surface it so it doesn't read as
+          "I'm the only tenant." The active tenant still resolves, so the team below works. */}
+      {isError && (
+        <span className="text-xs text-[var(--status-fail)]" role="alert">
+          Could not load tenants.
+        </span>
+      )}
     </div>
   )
 }
@@ -255,6 +265,7 @@ function TeamBody({
               isSuperadmin={isSuperadmin}
               isSelf={
                 callerEmail != null &&
+                typeof invite.email === 'string' &&
                 invite.email.toLowerCase() === callerEmail.toLowerCase()
               }
               adminCount={adminCount}
@@ -321,6 +332,10 @@ interface TeamRowProps {
 function TeamRow({ tenantId, invite, isSuperadmin, isSelf, adminCount }: TeamRowProps) {
   const revoke = useRevokeInvite(tenantId)
   const [confirming, setConfirming] = useState(false)
+  // The Revoke trigger — captured so focus returns to it when the confirm closes
+  // (a11y: a modal must restore focus to its opener, never drop it to <body>).
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const revokeReasonId = `team-revoke-reason-${invite.email}`
 
   // DECISION 5 — last-admin / self guardrails:
   //   - no Revoke on your OWN row;
@@ -331,7 +346,7 @@ function TeamRow({ tenantId, invite, isSuperadmin, isSelf, adminCount }: TeamRow
   const revokeDisabledReason = isSelf
     ? null // own row hides Revoke entirely (below)
     : isLastAdmin
-      ? 'Cannot remove the last admin. Promote another member first.'
+      ? 'Cannot remove the last admin — a team must keep at least one.'
       : null
 
   const alreadyRevoked = invite.status === 'revoked'
@@ -363,16 +378,34 @@ function TeamRow({ tenantId, invite, isSuperadmin, isSelf, adminCount }: TeamRow
       {/* DECISION 3 — Revoke is DESTRUCTIVE → a confirm step. Never on your own row,
           never on an already-revoked row. */}
       {!isSelf && !alreadyRevoked && (
-        <div className="ml-auto">
+        <div className="ml-auto flex flex-col items-end gap-1">
           {revokeDisabledReason ? (
-            <span
-              className="text-xs text-[var(--muted-foreground)]"
-              title={revokeDisabledReason}
-            >
-              Revoke
-            </span>
+            <>
+              {/* DECISION 5/7 — a disabled-with-reason Revoke must read as disabled and
+                  be announced (mirrors the disabled-Add reason): a real disabled
+                  <button> (focusable, conveys the disabled role) wired to a VISIBLE
+                  reason node via aria-describedby — never a title-only static span. */}
+              <Button
+                ref={triggerRef}
+                variant="ghost"
+                size="sm"
+                className="min-h-[44px] gap-1.5 text-[var(--muted-foreground)]"
+                disabled
+                aria-describedby={revokeReasonId}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                Revoke
+              </Button>
+              <p
+                id={revokeReasonId}
+                className="max-w-[16rem] text-right text-xs text-[var(--muted-foreground)]"
+              >
+                {revokeDisabledReason}
+              </p>
+            </>
           ) : (
             <Button
+              ref={triggerRef}
               variant="ghost"
               size="sm"
               className="min-h-[44px] gap-1.5 text-[var(--status-fail)]"
@@ -390,10 +423,27 @@ function TeamRow({ tenantId, invite, isSuperadmin, isSelf, adminCount }: TeamRow
         <RevokeConfirm
           email={invite.email}
           pending={revoke.isPending}
-          error={revoke.error instanceof ApiError ? revoke.error : null}
-          onCancel={() => setConfirming(false)}
+          // A NON-ApiError (network/timeout after the retry budget is exhausted —
+          // api.ts rethrows a raw TypeError/AbortError) must still surface, not vanish
+          // silently. Fall back to a generic line so the confirm always shows failure.
+          error={
+            revoke.isError
+              ? revoke.error instanceof ApiError
+                ? revoke.error.message
+                : 'Could not revoke access — check your connection and try again.'
+              : null
+          }
+          onCancel={() => {
+            setConfirming(false)
+            triggerRef.current?.focus()
+          }}
           onConfirm={() => {
-            revoke.mutate(invite.email, { onSuccess: () => setConfirming(false) })
+            revoke.mutate(invite.email, {
+              onSuccess: () => {
+                setConfirming(false)
+                triggerRef.current?.focus()
+              },
+            })
           }}
         />
       )}
@@ -404,7 +454,7 @@ function TeamRow({ tenantId, invite, isSuperadmin, isSelf, adminCount }: TeamRow
 interface RevokeConfirmProps {
   email: string
   pending: boolean
-  error: ApiError | null
+  error: string | null
   onCancel: () => void
   onConfirm: () => void
 }
@@ -427,7 +477,15 @@ function RevokeConfirm({ email, pending, error, onCancel, onConfirm }: RevokeCon
       const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
         'button:not([disabled])',
       )
-      if (!focusables || focusables.length === 0) return
+      // While the DELETE is in flight BOTH buttons are disabled, so the list is
+      // empty. Returning here would let Tab escape the aria-modal dialog into the
+      // page behind it (a real focus-trap leak). Instead, pin focus to the dialog
+      // container (tabIndex=-1) so containment holds for the whole pending window.
+      if (!focusables || focusables.length === 0) {
+        e.preventDefault()
+        dialogRef.current?.focus()
+        return
+      }
       const first = focusables[0]!
       const last = focusables[focusables.length - 1]!
       if (e.shiftKey && document.activeElement === first) {
@@ -448,6 +506,7 @@ function RevokeConfirm({ email, pending, error, onCancel, onConfirm }: RevokeCon
       role="alertdialog"
       aria-modal="true"
       aria-label={`Revoke access for ${email}`}
+      tabIndex={-1}
       className="mt-2 w-full border border-[var(--status-fail-line)] bg-[var(--status-fail-bg)] px-4 py-3"
     >
       <p className="text-sm leading-relaxed text-[var(--foreground)]">
@@ -455,7 +514,9 @@ function RevokeConfirm({ email, pending, error, onCancel, onConfirm }: RevokeCon
         lose the workspace.
       </p>
       {error && (
-        <p className="mt-2 text-xs text-[var(--status-fail)]">{error.message}</p>
+        <p className="mt-2 text-xs text-[var(--status-fail)]" role="alert">
+          {error}
+        </p>
       )}
       <div className="mt-3 flex items-center gap-3">
         <Button
@@ -594,14 +655,19 @@ function AddMemberRow({ tenantId, atCap, seats, isSuperadmin, autoFocus }: AddMe
         </p>
       )}
 
-      {/* A 403 / TEAM_FULL on add degrades to an inline error, never a white-screen. */}
-      {invite.isError && invite.error instanceof ApiError && (
+      {/* A 403 / TEAM_FULL on add degrades to an inline error, never a white-screen.
+          A NON-ApiError (network/timeout after the retry budget is exhausted — api.ts
+          rethrows a raw TypeError/AbortError) must ALSO surface, not vanish silently:
+          fall back to a generic connection line so the user always gets feedback. */}
+      {invite.isError && (
         <p className="text-xs text-[var(--status-fail)]" role="alert">
-          {invite.error.code === 'TEAM_FULL'
-            ? `Team is full (${SEAT_CAP}/${SEAT_CAP}). Revoke an invite to free a seat.`
-            : invite.error.code === 'APPROVAL_DENIED'
-              ? 'You do not have permission to add that member.'
-              : invite.error.message}
+          {invite.error instanceof ApiError
+            ? invite.error.code === 'TEAM_FULL'
+              ? `Team is full (${SEAT_CAP}/${SEAT_CAP}). Revoke an invite to free a seat.`
+              : invite.error.code === 'APPROVAL_DENIED'
+                ? 'You do not have permission to add that member.'
+                : invite.error.message
+            : 'Could not add that member — check your connection and try again.'}
         </p>
       )}
     </div>
