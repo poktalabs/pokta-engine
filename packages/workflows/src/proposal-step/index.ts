@@ -98,27 +98,41 @@ async function commitCrm(crm: CrmEntry, ctx: RunContext): Promise<IntegrationRes
   }
 }
 
-export async function run(input: IntakeArtifact, ctx: RunContext): Promise<ProposalOutput> {
+export async function run(
+  input: IntakeArtifact & { scripted?: boolean },
+  ctx: RunContext,
+): Promise<ProposalOutput> {
   // 1. Draft the proposal + email FIRST. This is the artifact gate 2 reviews;
   //    it must never be discarded by a downstream CRM failure.
   let proposal: Proposal
   let email: ClientEmail
   let generatedBy: 'llm' | 'scripted'
-  try {
-    const data = await completeJSON<{ proposal: Proposal; email: ClientEmail }>({
-      system: SYSTEM,
-      user: `Extraction:\n${JSON.stringify(input.extraction, null, 2)}\n\nApproved CRM entry:\n${JSON.stringify(input.crmEntry, null, 2)}`,
-      maxTokens: 1100,
-    })
-    proposal = data.proposal
-    email = data.email
-    generatedBy = 'llm'
-  } catch (e) {
-    ctx.logger.info(`proposal-step: LLM unavailable (${(e as Error).message}); using scripted draft`)
+  if (input.scripted) {
+    // Demo / no-LLM mode (threaded from call-intake via the gate-1 artifact): use
+    // the deterministic scripted draft, ZERO LLM call. The Notion CRM write below
+    // STILL runs (real side effect) — only the drafting is short-circuited.
+    ctx.logger.info('proposal-step: scripted mode (no LLM — demo path)')
     const s = scripted(input.crmEntry, input.extraction)
     proposal = s.proposal
     email = s.email
     generatedBy = 'scripted'
+  } else {
+    try {
+      const data = await completeJSON<{ proposal: Proposal; email: ClientEmail }>({
+        system: SYSTEM,
+        user: `Extraction:\n${JSON.stringify(input.extraction, null, 2)}\n\nApproved CRM entry:\n${JSON.stringify(input.crmEntry, null, 2)}`,
+        maxTokens: 1100,
+      })
+      proposal = data.proposal
+      email = data.email
+      generatedBy = 'llm'
+    } catch (e) {
+      ctx.logger.info(`proposal-step: LLM unavailable (${(e as Error).message}); using scripted draft`)
+      const s = scripted(input.crmEntry, input.extraction)
+      proposal = s.proposal
+      email = s.email
+      generatedBy = 'scripted'
+    }
   }
 
   // 2. Commit the approved CRM entry to Notion (post gate-1). Fail-soft.

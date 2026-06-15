@@ -311,8 +311,12 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
 
   // ── Operator-only surfaces (cross-tenant rollups) — gated at composition level ──
   const op = operatorAuth()
-  app.use('/demo', op)
-  app.use('/demo/*', op)
+  // The prospect-facing demo (`/demo`, `/demo/ops`, `/demo/api/*`) is PUBLIC: no
+  // operator key, so a visitor can "check the demo" without an account. Safety is
+  // enforced INSIDE demo.ts, not by this gate: every read/write is scoped to
+  // consumerId 'demo' (incl. the /demo/ops rollup), runs are forced no-LLM
+  // (scripted), and /demo/api/run is per-IP rate-limited. The cross-tenant operator
+  // rollups live at /dashboard + /console, which STAY key-gated below.
   app.use('/dashboard', op)
   app.use('/dashboard/*', op)
   app.use('/console', op)

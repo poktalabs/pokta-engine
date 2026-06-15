@@ -18,6 +18,9 @@ const manifest: WorkflowManifest = {
       source: z.string().optional(),
       extraction: z.any(),
       crmEntry: z.any(),
+      // Threaded from call-intake's artifact (no-LLM demo path). Passthrough would
+      // carry it anyway; declared here because proposal-step.run() reads it.
+      scripted: z.boolean().optional(),
     })
     .passthrough(),
 }

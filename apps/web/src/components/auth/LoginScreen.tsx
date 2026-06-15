@@ -46,10 +46,23 @@ export function brandForPath(pathname: string): LoginBrand {
   }
 }
 
+/**
+ * Public demo URL (the engine-api's server-rendered `/demo`). Prefer an explicit
+ * `VITE_DEMO_URL` (e.g. a future demo.pokta.xyz); otherwise derive it from the API
+ * base. Empty when neither is set (mock-only local dev) → the link is hidden.
+ */
+export function resolveDemoUrl(): string {
+  const explicit = import.meta.env.VITE_DEMO_URL as string | undefined
+  if (explicit) return explicit.replace(/\/$/, '')
+  const api = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '')
+  return api ? `${api}/demo` : ''
+}
+
 export function LoginScreen() {
   const { login } = usePrivy()
   // PRE-router: there is no route param yet, so read the raw browser path.
   const { heading, subcopy } = brandForPath(window.location.pathname)
+  const demoUrl = resolveDemoUrl()
 
   return (
     <main
@@ -63,9 +76,20 @@ export function LoginScreen() {
         </h1>
         <p className="max-w-sm text-sm text-[var(--muted-foreground)]">{subcopy}</p>
       </div>
-      <Button onClick={() => login()} size="lg">
-        Sign in
-      </Button>
+      <div className="flex flex-col items-center gap-4">
+        <Button onClick={() => login()} size="lg">
+          Sign in
+        </Button>
+        {demoUrl && (
+          // No account? See the engine run end-to-end on a sample workspace.
+          <a
+            href={demoUrl}
+            className="text-sm font-medium text-[var(--accent-text)] underline-offset-4 hover:underline"
+          >
+            Check the demo →
+          </a>
+        )}
+      </div>
     </main>
   )
 }

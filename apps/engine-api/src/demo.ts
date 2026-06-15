@@ -9,6 +9,41 @@ import { demoPage, demoOpsPage } from './demo-page'
 
 const CONSUMER = 'demo'
 
+/**
+ * Best-effort per-IP rate limit for the PUBLIC demo run endpoint. The demo is
+ * ungated (no operator key), so without this any visitor could spam dispatches.
+ * In-memory (engine-api runs as a single instance); a token-list per IP within a
+ * sliding window. Not a security boundary — a cost/abuse guardrail. The chain is
+ * forced no-LLM (scripted) so the marginal cost of a run is a Notion write, which
+ * this caps.
+ */
+const RUN_LIMIT = 12
+const RUN_WINDOW_MS = 10 * 60_000 // 10 minutes
+const runHits = new Map<string, number[]>()
+
+function clientIp(forwardedFor: string | undefined, realIp: string | undefined): string {
+  const fwd = (forwardedFor ?? '').split(',')[0]?.trim()
+  return fwd || realIp?.trim() || 'unknown'
+}
+
+/** Returns true if this IP is OVER the limit (and should be rejected). */
+function rateLimited(ip: string, nowMs: number): boolean {
+  const recent = (runHits.get(ip) ?? []).filter((t) => nowMs - t < RUN_WINDOW_MS)
+  if (recent.length >= RUN_LIMIT) {
+    runHits.set(ip, recent)
+    return true
+  }
+  recent.push(nowMs)
+  runHits.set(ip, recent)
+  // Opportunistic prune so the map can't grow unbounded across many one-off IPs.
+  if (runHits.size > 5000) {
+    for (const [k, v] of runHits) {
+      if (v.every((t) => nowMs - t >= RUN_WINDOW_MS)) runHits.delete(k)
+    }
+  }
+  return false
+}
+
 async function enqueue(runId: string): Promise<void> {
   const boss = await getBoss()
   await boss.send(QUEUE, { runId } satisfies RunJob)
@@ -33,7 +68,10 @@ async function dispatchRun(workflowId: string, input: unknown, parentRunId?: str
 async function assembleState(rootRunId: string) {
   const runsByWf: Record<string, typeof schema.engineRuns.$inferSelect> = {}
   let current = await db.query.engineRuns.findFirst({ where: eq(schema.engineRuns.runId, rootRunId) })
-  if (!current) return null
+  // PUBLIC endpoint: only ever expose DEMO runs. A non-demo (real tenant) root, or
+  // an unknown id, is indistinguishable here → null (404). Prevents reading another
+  // tenant's run chain by id.
+  if (!current || current.consumerId !== CONSUMER) return null
   const chainIds: string[] = []
   while (current) {
     runsByWf[current.workflowId] = current
@@ -48,12 +86,29 @@ async function assembleState(rootRunId: string) {
   return { rootRunId, runsByWf, approvals }
 }
 
-/** Approve a gate: validate artifact, insert chained child run, flip gate, enqueue. */
-async function approveGate(approvalId: string, decidedBy: string): Promise<string> {
+/**
+ * Resolve an approval and assert it belongs to the DEMO consumer. The /demo API is
+ * PUBLIC, so an approve/reject MUST never act on a real tenant's approval by id. A
+ * non-demo or missing approval is reported identically (SKILL_NOT_FOUND) so a caller
+ * cannot tell a real approval id from a non-existent one.
+ */
+async function demoApprovalOr404(approvalId: string) {
   const approval = await db.query.engineApprovals.findFirst({
     where: eq(schema.engineApprovals.approvalId, approvalId),
   })
   if (!approval) throw new EngineError('SKILL_NOT_FOUND', 'approval not found')
+  const source = await db.query.engineRuns.findFirst({
+    where: eq(schema.engineRuns.runId, approval.sourceRunId),
+  })
+  if (!source || source.consumerId !== CONSUMER) {
+    throw new EngineError('SKILL_NOT_FOUND', 'approval not found')
+  }
+  return approval
+}
+
+/** Approve a gate: validate artifact, insert chained child run, flip gate, enqueue. */
+async function approveGate(approvalId: string, decidedBy: string): Promise<string> {
+  const approval = await demoApprovalOr404(approvalId)
   if (approval.state !== 'pending') throw new EngineError('APPROVAL_DENIED', `already ${approval.state}`)
 
   const target = getWorkflow(approval.workflowId)
@@ -91,19 +146,44 @@ export function mountDemo(app: Hono): void {
   app.get('/demo', (c) => c.html(demoPage()))
 
   app.get('/demo/ops', async (c) => {
-    const runs = await db.select().from(schema.engineRuns).orderBy(desc(schema.engineRuns.createdAt)).limit(30)
-    const approvals = await db.select().from(schema.engineApprovals).orderBy(desc(schema.engineApprovals.createdAt)).limit(30)
+    // PUBLIC, but DEMO-SCOPED: only ever show consumerId 'demo' rows so the
+    // "under the hood" view never exposes a real tenant's runs/approvals.
+    const runs = await db
+      .select()
+      .from(schema.engineRuns)
+      .where(eq(schema.engineRuns.consumerId, CONSUMER))
+      .orderBy(desc(schema.engineRuns.createdAt))
+      .limit(30)
+    const demoRunIds = runs.map((r) => r.runId)
+    const approvals = demoRunIds.length
+      ? await db
+          .select()
+          .from(schema.engineApprovals)
+          .where(inArray(schema.engineApprovals.sourceRunId, demoRunIds))
+          .orderBy(desc(schema.engineApprovals.createdAt))
+          .limit(30)
+      : []
     return c.html(demoOpsPage(runs, approvals))
   })
 
   app.post('/demo/api/run', async (c) => {
+    // Cost/abuse guard for the PUBLIC endpoint: per-IP sliding-window rate limit.
+    const ip = clientIp(c.req.header('x-forwarded-for'), c.req.header('x-real-ip'))
+    if (rateLimited(ip, Date.now())) {
+      return c.json({ error: 'Too many demo runs from your network — give it a few minutes.' }, 429)
+    }
     const body = (await c.req.json().catch(() => ({}))) as { transcript?: string; source?: string }
     if (!body.transcript || body.transcript.trim().length < 20) {
       return c.json({ error: 'transcript required (paste a call transcript)' }, 400)
     }
+    // PUBLIC demo: force the no-LLM scripted path so a visitor can never drive an LLM
+    // request (cost/prompt-injection). `scripted: true` threads call-intake → gate-1
+    // → proposal-step; the real (LLM) Vino tenant pipeline never sets it.
+    const transcript = body.transcript.slice(0, 8000) // cap stored payload size
     const rootRunId = await dispatchRun('call-intake', {
-      transcript: body.transcript,
+      transcript,
       source: body.source ?? 'Granola call',
+      scripted: true,
     })
     return c.json({ rootRunId })
   })
@@ -127,6 +207,14 @@ export function mountDemo(app: Hono): void {
 
   app.post('/demo/api/approvals/:id/reject', async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as { decided_by?: string }
+    try {
+      // Scope to the demo consumer FIRST so a public caller can't reject a real
+      // tenant's pending approval by id.
+      await demoApprovalOr404(c.req.param('id'))
+    } catch (e) {
+      if (e instanceof EngineError) return c.json({ error: e.toEnvelope() }, 409)
+      throw e
+    }
     const updated = await db
       .update(schema.engineApprovals)
       .set({ state: 'rejected', decidedBy: body.decided_by ?? 'demo-owner', decidedAt: new Date() })

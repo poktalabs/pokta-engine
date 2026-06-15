@@ -109,3 +109,23 @@ describe('proposal-step run — CRM commit', () => {
     )
   })
 })
+
+describe('proposal-step run — scripted (no-LLM demo) mode', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('scripted:true NEVER calls the LLM, yet STILL writes the CRM row to Notion', async () => {
+    // If the demo path leaked an LLM call, this resolved value would be used — we
+    // assert it is NOT, so a public visitor can never drive an LLM request.
+    vi.mocked(completeJSON).mockResolvedValue({ proposal: {}, email: {} } as never)
+    vi.mocked(commitCrmEntry).mockResolvedValue({ pageId: 'page-x', url: 'u' })
+
+    const out = await run({ ...input, scripted: true }, ctx)
+
+    expect(completeJSON).not.toHaveBeenCalled()
+    expect(out.generatedBy).toBe('scripted')
+    // The real side effect (Notion CRM write) STILL happens in demo mode.
+    expect(commitCrmEntry).toHaveBeenCalledTimes(1)
+    expect(out.crmResult.status).toBe('ok')
+    expect(out.proposal.lineItems.length).toBeGreaterThan(0)
+  })
+})
