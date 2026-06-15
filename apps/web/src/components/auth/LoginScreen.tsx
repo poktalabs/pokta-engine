@@ -47,15 +47,13 @@ export function brandForPath(pathname: string): LoginBrand {
 }
 
 /**
- * Public demo URL (the engine-api's server-rendered `/demo`). Prefer an explicit
- * `VITE_DEMO_URL` (e.g. a future demo.pokta.xyz); otherwise derive it from the API
- * base. Empty when neither is set (mock-only local dev) → the link is hidden.
+ * Public demo URL. Served by THIS web app at same-origin `/demo` (public/demo.html
+ * embeds the engine-api demo), so the prospect stays under app.pokta.xyz. An
+ * explicit `VITE_DEMO_URL` overrides it if we ever move the demo elsewhere.
  */
 export function resolveDemoUrl(): string {
   const explicit = import.meta.env.VITE_DEMO_URL as string | undefined
-  if (explicit) return explicit.replace(/\/$/, '')
-  const api = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '')
-  return api ? `${api}/demo` : ''
+  return explicit ? explicit.replace(/\/$/, '') : '/demo'
 }
 
 export function LoginScreen() {
