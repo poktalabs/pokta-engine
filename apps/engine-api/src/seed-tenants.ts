@@ -74,6 +74,11 @@ function unionMemberDids(a: string[], b: string[]): string[] {
  * The seed set (PR2 §4):
  *   - mi-pase  — ACTIVE (the first paid client; real Shopify dev creds).
  *   - vino     — PENDING (no real creds until PR3; must NOT resolve/dispatch yet).
+ *   - demo     — ACTIVE: the consumer the PUBLIC /demo dispatches as. The worker
+ *                fails any run whose consumer is not an ACTIVE tenant
+ *                (loadTenantSecrets), so the public demo needs a real tenant row.
+ *                No per-tenant secrets (secretPrefix null) — the demo's Notion/
+ *                Resend creds are GLOBAL env and it runs no-LLM (scripted).
  * The allowedWorkflows ids are the REAL M1 / Vino manifest ids; `validateSeeds`
  * cross-checks them against listManifests() so a workflow rename fails the deploy
  * loudly rather than silently seeding a dead allow-list entry.
@@ -100,6 +105,17 @@ export const TENANT_SEEDS: TenantSeed[] = [
     allowedWorkflows: ['call-intake', 'proposal-step', 'send-step'],
     members: [],
     secretPrefix: 'VINO',
+  },
+  {
+    tenantId: 'demo',
+    name: 'Pokta Engine Demo',
+    status: 'active',
+    currency: 'USD',
+    locale: 'en',
+    branding: { name: 'Demo', badge: 'Public demo' },
+    allowedWorkflows: ['call-intake', 'proposal-step', 'send-step'],
+    members: [], // no members — public /demo dispatches server-side as consumer 'demo'
+    secretPrefix: null, // Notion/Resend are global env; demo runs no-LLM (scripted)
   },
 ]
 
