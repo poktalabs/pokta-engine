@@ -1,0 +1,13 @@
+{
+  "name": "PoktaEngine",
+  "short_name": "PoktaEngine",
+  "description": "The multi-tenant AI workflow engine by Pokta Labs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F2F9",
+  "theme_color": "#0E092A",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }
+  ]
+}
