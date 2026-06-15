@@ -3,20 +3,22 @@ import { useTenant } from '@/providers/TenantProvider'
 /**
  * Product + tenant co-branding lockup (P1).
  *
- * "Godin Engine by Pokta Labs" is the PRODUCT brand; the tenant identity (Mi
- * Pase / Vino) sits beside it with an optional amber "test store" badge. Funnel
- * Display medium wordmark; "Godin" = secondary (Midnight Violet), "Engine" =
- * accent (Brick Ember), per the brand lockup rule.
+ * The PRODUCT brand is the Pokta Labs mark + "PoktaEngine" wordmark, mirroring
+ * the poktalabs-landing-page lockup: 20px logo, gap-1 to the wordmark, words
+ * set together in Funnel Display with "Pokta" = secondary (Midnight Violet) and
+ * "Engine" = accent (Brick Ember). The lockup column is w-56 so it lines up with
+ * the sidebar beneath it. The tenant identity (Mi Pase / Vino) sits beside it
+ * with an optional amber "test store" badge.
  */
 export function TenantHeader() {
   const tenant = useTenant()
   return (
     <div className="flex items-center gap-4">
-      <span className="inline-flex items-baseline gap-1.5 font-funnel text-lg font-medium tracking-tight">
-        <span className="text-secondary">Godin</span>
-        <span className="text-accent">Engine</span>
-        <span className="ml-1 text-xs font-normal text-[var(--muted-foreground)]">
-          by Pokta Labs
+      <span className="inline-flex w-56 shrink-0 items-center gap-1 font-funnel text-2xl font-medium tracking-tight">
+        <img src="/logo/poktalabs-logo.svg" alt="Pokta Labs" width={20} height={20} className="size-5" />
+        <span>
+          <span className="text-secondary">Pokta</span>
+          <span className="text-accent">Engine</span>
         </span>
       </span>
 
