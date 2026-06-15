@@ -14,9 +14,10 @@ import { brandForPath, LoginScreen } from '@/components/auth/LoginScreen'
  *
  * `LoginScreen` is rendered by `AuthGate` PRE-router (above TenantProvider/the
  * router), so the branded variant is selected from `window.location.pathname`,
- * NOT a route param. `/mi-pase` (and its sub-paths) renders Mi-Pase-branded copy;
- * every other path renders the generic Godinez Workspace copy. The SAME
- * `usePrivy().login()` CTA fires regardless of path.
+ * NOT a route param. `/mi-pase` (and its sub-paths) renders Mi-Pase-specific copy;
+ * every other path renders the generic workspace copy (the PoktaEngine product
+ * lockup is shown above either). The SAME `usePrivy().login()` CTA fires
+ * regardless of path.
  *
  * The load-bearing invariant: this is PURELY COSMETIC. The login screen feeds
  * NOTHING into the claim/auth flow — it issues no network request (no
@@ -43,28 +44,28 @@ beforeEach(() => {
 })
 
 describe('BRANDED LOGIN ★ — brandForPath pure selector (UX only)', () => {
-  it('maps /mi-pase (and sub-paths) to Mi-Pase copy; everything else to generic Godinez copy', () => {
+  it('maps /mi-pase (and sub-paths) to Mi-Pase copy; everything else to generic workspace copy', () => {
     // Exact /mi-pase → full Mi Pase brand object.
     expect(brandForPath('/mi-pase')).toEqual({
-      heading: 'Mi Pase',
-      subcopy: 'Sign in to your Mi Pase workspace.',
+      heading: 'Sign in to Mi Pase',
+      subcopy: 'Access your Mi Pase workspace. Sign in with your authorized email.',
     })
     // Sub-paths of /mi-pase still resolve the Mi Pase brand.
-    expect(brandForPath('/mi-pase/approvals').heading).toBe('Mi Pase')
-    expect(brandForPath('/mi-pase/runs/abc').heading).toBe('Mi Pase')
+    expect(brandForPath('/mi-pase/approvals').heading).toBe('Sign in to Mi Pase')
+    expect(brandForPath('/mi-pase/runs/abc').heading).toBe('Sign in to Mi Pase')
 
-    // Generic paths → Godinez Workspace.
-    expect(brandForPath('/').heading).toBe('Godinez Workspace')
-    expect(brandForPath('/vino').heading).toBe('Godinez Workspace')
-    expect(brandForPath('/mi-pase-other').heading).toBe('Godinez Workspace')
+    // Generic paths → the generic workspace copy.
+    expect(brandForPath('/').heading).toBe('Sign in to your workspace')
+    expect(brandForPath('/vino').heading).toBe('Sign in to your workspace')
+    expect(brandForPath('/mi-pase-other').heading).toBe('Sign in to your workspace')
   })
 
   it('does NOT prefix-false-positive: /mi-pase-other is the generic brand, not Mi Pase', () => {
     // The selector must distinguish the exact segment `/mi-pase` (and `/mi-pase/…`)
     // from an unrelated path that merely starts with the same characters.
     const brand = brandForPath('/mi-pase-other')
-    expect(brand.heading).toBe('Godinez Workspace')
-    expect(brand.heading).not.toBe('Mi Pase')
+    expect(brand.heading).toBe('Sign in to your workspace')
+    expect(brand.heading).not.toBe('Sign in to Mi Pase')
   })
 })
 
@@ -73,35 +74,35 @@ describe('BRANDED LOGIN ★ — /mi-pase pre-auth renders Mi-Pase copy', () => {
     window.history.replaceState(null, '', '/mi-pase')
     render(<LoginScreen />)
 
-    expect(screen.getByRole('heading', { name: 'Mi Pase' })).toBeInTheDocument()
-    expect(screen.getByText(/sign in to your mi pase workspace/i)).toBeInTheDocument()
-    // The generic Godinez heading must NOT also be present.
-    expect(screen.queryByRole('heading', { name: 'Godinez Workspace' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to Mi Pase' })).toBeInTheDocument()
+    expect(screen.getByText(/access your mi pase workspace/i)).toBeInTheDocument()
+    // The generic workspace heading must NOT also be present.
+    expect(screen.queryByRole('heading', { name: 'Sign in to your workspace' })).not.toBeInTheDocument()
   })
 
   it('renders the Mi-Pase brand on a /mi-pase sub-path too (deep-link entry)', () => {
     window.history.replaceState(null, '', '/mi-pase/approvals')
     render(<LoginScreen />)
 
-    expect(screen.getByRole('heading', { name: 'Mi Pase' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to Mi Pase' })).toBeInTheDocument()
   })
 })
 
-describe('BRANDED LOGIN ★ — generic Godinez copy on every other path', () => {
-  it('renders the default Godinez Workspace copy on the root path', () => {
+describe('BRANDED LOGIN ★ — generic workspace copy on every other path', () => {
+  it('renders the default generic workspace copy on the root path', () => {
     window.history.replaceState(null, '', '/')
     render(<LoginScreen />)
 
-    expect(screen.getByRole('heading', { name: 'Godinez Workspace' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to your workspace' })).toBeInTheDocument()
     // No Mi-Pase branding bleeds through onto the generic surface.
-    expect(screen.queryByRole('heading', { name: 'Mi Pase' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sign in to Mi Pase' })).not.toBeInTheDocument()
   })
 
-  it('renders the default Godinez copy on an unrelated tenant-shaped path (/vino)', () => {
+  it('renders the default generic copy on an unrelated tenant-shaped path (/vino)', () => {
     window.history.replaceState(null, '', '/vino')
     render(<LoginScreen />)
 
-    expect(screen.getByRole('heading', { name: 'Godinez Workspace' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to your workspace' })).toBeInTheDocument()
   })
 })
 
