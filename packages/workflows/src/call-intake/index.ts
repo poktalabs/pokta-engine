@@ -27,6 +27,12 @@ export interface IntakeOutput {
   extraction: Extraction
   crmEntry: CrmEntry
   generatedBy: 'llm' | 'scripted'
+  /**
+   * Demo / no-LLM marker. When dispatched with `scripted: true` (the public /demo
+   * path), this threads through the gate-1 artifact into proposal-step so the WHOLE
+   * chain stays LLM-free, not just step 1.
+   */
+  scripted?: boolean
 }
 
 const SYSTEM = `You are an operations agent for Vino Design Build, a residential construction / design-build firm.
@@ -66,8 +72,18 @@ const SCRIPTED: { extraction: Extraction; crmEntry: CrmEntry } = {
   },
 }
 
-export async function run(input: { transcript: string; source?: string }, ctx: RunContext): Promise<IntakeOutput> {
+export async function run(
+  input: { transcript: string; source?: string; scripted?: boolean },
+  ctx: RunContext,
+): Promise<IntakeOutput> {
   const source = input.source ?? 'Granola call'
+  // Demo / no-LLM mode (public /demo): deterministic scripted draft, ZERO LLM call.
+  // Set on the run input by the demo dispatcher so a public visitor can never drive
+  // an LLM request. `scripted: true` is echoed so it threads into proposal-step.
+  if (input.scripted) {
+    ctx.logger.info('call-intake: scripted mode (no LLM — demo path)')
+    return { source, ...SCRIPTED, generatedBy: 'scripted', scripted: true }
+  }
   try {
     const data = await completeJSON<{ extraction: Extraction; crmEntry: CrmEntry }>({
       system: SYSTEM,
