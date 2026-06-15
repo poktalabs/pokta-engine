@@ -21,6 +21,12 @@ export default defineConfig({
         target: 'http://localhost:8787',
         changeOrigin: true,
       },
+      // The public /demo page calls the engine's open demo API; proxy it in dev so
+      // the React demo works against a local engine without a baked VITE_API_URL.
+      '/demo/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
     },
   },
 })
