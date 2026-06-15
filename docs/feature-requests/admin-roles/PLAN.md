@@ -99,12 +99,33 @@ memberRole = pgEnum('member_role', ['admin','member'])
 
 ## 5. SPA (`feat/admin-roles-spa`, after backend deploys)
 - `useTenantContext()` exposes `role` + `isSuperadmin` (from `/tenants/me`).
-- **Settings → Team panel** (`settings/TeamPanel.tsx`), role-adaptive, replaces the deferred roster placeholder:
-  - **member** → no panel (or read-only "you're on the {tenant} team").
-  - **tenant admin** → list team (pending/claimed/revoked + members), add email (disabled at 5, shows "5/5
-    used"), revoke. Member role only.
-  - **superadmin** → additionally a tenants picker; per tenant: manage admins (add admin-invite), manage team,
-    and a superadmins section.
+- **Settings → Team panel** (`settings/TeamPanel.tsx`), role-adaptive, replaces the deferred `MemberRosterPanel`
+  placeholder. Editorial language matching the existing Settings panels (serif `section` heading, hairline rules,
+  surface card, lucide line icons, NO heavy shadows — see `MemberRosterPanel.tsx`/`ErrorState.tsx`).
+  - **member** → NO management UI; one honest line ("You're on the {tenant} team. Contact an admin to manage
+    members."). Replaces the "coming soon" shell.
+  - **tenant admin** → ONE scannable list (not a card grid), each row = email + a **role pill** (Admin = filled
+    violet / Member = outline) + a **status tag** (Active / Pending / Revoked-faint) + a quiet **Revoke** action.
+    Member role only.
+  - **superadmin** → a quiet **tenant picker** above the panel (`Managing: [Mi Pase ▾]`), the same team view for
+    the picked tenant, the **role toggle visible** (can invite as Admin), and a "Platform" tag on their own row.
+- **DESIGN DECISIONS (locked, /plan-design-review):**
+  1. **Seat cap always visible** in the panel header as `X / 5 seats`. **Over-cap** (mi-pase is 6/5 today, D3
+     grandfathered) flips to an **amber-hairline WARNING** (not error-red — it's a managed state, not a failure):
+     "Over your 5-seat limit. Revoke a pending invite to add someone."
+  2. **Role = pill badge** (Admin filled / Member outline, with TEXT labels not color-only); **status = quiet tag**.
+  3. **Revoke is DESTRUCTIVE → a confirm step** ("Revoke access for {email}? They'll lose the workspace.") with
+     the email echoed. No accidental one-click removal.
+  4. **Add is DISABLED-WITH-REASON at/over cap** (the reason is rendered, `aria-describedby`, not a silent grey
+     button): "Team is full (6/5). Revoke an invite to free a seat." The **role toggle renders ONLY for a
+     superadmin** — a tenant-admin literally cannot choose Admin (mirrors the server's reject-don't-coerce).
+  5. **Self / last-admin guardrails in the UI:** no Revoke on your own row; a demote/revoke the server would 409
+     (last admin) is pre-disabled with a tooltip, so the user never hits a raw error.
+  6. **Empty state is a feature:** a tenant-admin with no team yet sees a warm line ("It's just you so far —
+     invite your team, up to 5.") + the email input focused, NOT "no rows".
+  7. **a11y:** disabled-Add reason via `aria-describedby`; the revoke-confirm is keyboard-trappable + Esc-dismiss;
+     badges/cap-warning carry icon+text (never color-only); 44px touch targets; the tenant-picker is a native
+     select or a labeled combobox.
 - New hooks (`use-team`, mutations) → the role-gated endpoints; add the new paths to `LIVE_PATHS`. Optimistic or
   refetch-on-success; surface `TEAM_FULL` / `APPROVAL_DENIED` honestly.
 - **Server is the authority:** the panel is cosmetic; every action is re-checked server-side (a member who
@@ -177,7 +198,7 @@ WAVE B — SPA (feat/admin-roles-spa): role-adaptive Team panel + hooks + LIVE_P
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | not run |
 | Outside Voice | `/codex` (codex exec) | Independent 2nd opinion | 1 | issues_found | 18 findings → re-included promote, reject-not-coerce, anti-enum/no-leak, seats=member-rows, break-glass, additive /tenants/me, minimal audit |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clean (scope reduced then 1 item re-added) | Step-0 trim (defer promote+superadmin-mgmt); 1 cap-denominator decision; arch hardening folded; 0 unresolved |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | not run (the new UI is a Settings panel; worth a pass before Wave B) |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | clean (5→9/10) | Team-panel §5 raised 5→9/10: 7 design decisions locked (visible seat cap, amber over-cap warning, role pills, destructive revoke-confirm, disabled-add-with-reason + superadmin-only role toggle, warm empty state, a11y). AI mockups skipped (designer API out of quota → ASCII wireframes); codex design voice timed out (non-blocking). |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | not run |
 
 - **CODEX:** read auth/tenancy/invites + the wire-shape history; 18 findings. The load-bearing catch (#1):
@@ -193,7 +214,8 @@ WAVE B — SPA (feat/admin-roles-spa): role-adaptive Team panel + hooks + LIVE_P
 - **DECISIONS:** scope reduced (defer manage-OTHER-superadmins + full audit log only) · cap = member rows +
   pending invites, superadmin-via-member-row counts, advisory-locked, over-cap grandfathered · promote/demote
   re-included (superadmin) · reject-not-coerce · additive `/tenants/me` · break-glass via operator key.
-- **VERDICT:** ENG CLEARED — buildable as two gated waves (backend role spine + cap + endpoints → deploy → SPA
+- **DESIGN:** Team-panel §5 cleared (5→9/10) — 7 design decisions locked (states, seat-cap/over-cap, role pills, destructive revoke-confirm, disabled-add-with-reason, warm empty state, a11y). Wave A (backend) is MERGED + DEPLOYED (migration 0007, superadmin seeded); Wave B builds the panel per §5.
+- **VERDICT:** ENG + DESIGN CLEARED — buildable as two gated waves (backend role spine + cap + endpoints → deploy → SPA
   Team panel). A `/plan-design-review` on the Settings panel before Wave B is recommended but not required.
 
 NO UNRESOLVED DECISIONS

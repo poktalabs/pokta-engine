@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { TenantView } from '@godin-engine/contract'
+import type { MemberRole, TenantView } from '@godin-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
 
 /**
@@ -106,6 +106,14 @@ interface TenantContextValue {
   tenant: TenantConfig | null
   /** Raw server view (null until loaded) for callers that need the full payload. */
   view: TenantView | null
+  /**
+   * The caller's role in the resolved tenant (admin-roles Wave A/B; ADDITIVE) — or
+   * `null` while loading / when the wire shape predates the role field. The Settings
+   * → Team panel adapts off this + `isSuperadmin`; the server re-checks every action.
+   */
+  role: MemberRole | null
+  /** Whether the caller is a platform superadmin (cross-tenant). Cosmetic only. */
+  isSuperadmin: boolean
   status: 'loading' | 'ready' | 'access-denied' | 'error' | 'provisioning'
   /** The underlying query error (for the generic error state). */
   error: unknown
@@ -212,6 +220,12 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     return {
       tenant: view ? toTenantConfig(view) : null,
       view,
+      // ADDITIVE role projection (admin-roles): default member-ish — a missing
+      // `role` (pre-wave wire shape, or a still-loading view) is `null`, and a
+      // missing `isSuperadmin` is `false`. The server is the authority; this only
+      // drives which panel variant renders.
+      role: view?.role ?? null,
+      isSuperadmin: view?.isSuperadmin ?? false,
       status,
       error: query.error,
       refetch: () => void query.refetch(),

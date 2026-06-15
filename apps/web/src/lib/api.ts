@@ -88,6 +88,11 @@ const LIVE_PATHS: ReadonlySet<string> = new Set([
   '/v1/integrations',
   '/v1/runs',
   '/v1/approvals',
+  // admin-roles Wave B — the superadmin tenant PICKER list. A flat path, so it
+  // lives in the exact Set; the team/invite/member endpoints are parameterized
+  // (below). NOTE the patterns require an `/invites` or `/members` suffix, so they
+  // can never match the separate `/v1/tenants/me` exact entry above.
+  '/v1/superadmin/tenants',
 ])
 
 /** Parameterized live paths a static Set cannot match (matched against the pathname). */
@@ -95,6 +100,11 @@ const LIVE_PATH_PATTERNS: readonly RegExp[] = [
   /^\/v1\/workflows\/[^/]+\/runs$/,
   /^\/v1\/runs\/[^/]+$/,
   /^\/v1\/approvals\/[^/]+\/(approve|reject)$/,
+  // admin-roles Wave B — the role-gated team endpoints. The `/invites` and
+  // `/members` suffixes mean these NEVER match `/v1/tenants/me`.
+  /^\/v1\/tenants\/[^/]+\/invites$/,
+  /^\/v1\/tenants\/[^/]+\/invites\/[^/]+$/,
+  /^\/v1\/tenants\/[^/]+\/members\/[^/]+$/,
 ]
 
 /** True when `path` (query stripped) is a live network path even under mocks. */
