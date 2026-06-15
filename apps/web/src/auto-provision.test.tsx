@@ -226,30 +226,30 @@ describe('AUTO-PROVISION ★ — CRITICAL no-loop / masked-401', () => {
 })
 
 describe('BRANDED LOGIN — /mi-pase pre-auth (UX only)', () => {
-  it('brandForPath: /mi-pase → Mi Pase copy; other paths → generic Godinez copy', () => {
+  it('brandForPath: /mi-pase → Mi Pase copy; other paths → generic workspace copy', () => {
     expect(brandForPath('/mi-pase')).toEqual({
-      heading: 'Mi Pase',
-      subcopy: 'Sign in to your Mi Pase workspace.',
+      heading: 'Sign in to Mi Pase',
+      subcopy: 'Access your Mi Pase workspace. Sign in with your authorized email.',
     })
-    expect(brandForPath('/mi-pase/approvals').heading).toBe('Mi Pase')
-    expect(brandForPath('/').heading).toBe('Godinez Workspace')
-    expect(brandForPath('/vino').heading).toBe('Godinez Workspace')
+    expect(brandForPath('/mi-pase/approvals').heading).toBe('Sign in to Mi Pase')
+    expect(brandForPath('/').heading).toBe('Sign in to your workspace')
+    expect(brandForPath('/vino').heading).toBe('Sign in to your workspace')
     // Not a prefix false-positive: '/mi-pase-other' is NOT the mi-pase brand.
-    expect(brandForPath('/mi-pase-other').heading).toBe('Godinez Workspace')
+    expect(brandForPath('/mi-pase-other').heading).toBe('Sign in to your workspace')
   })
 
   it('renders Mi-Pase-branded login when window.location.pathname starts with /mi-pase', () => {
     window.history.replaceState(null, '', '/mi-pase')
     render(<LoginScreen />)
-    expect(screen.getByRole('heading', { name: 'Mi Pase' })).toBeInTheDocument()
-    expect(screen.getByText(/sign in to your mi pase workspace/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to Mi Pase' })).toBeInTheDocument()
+    expect(screen.getByText(/access your mi pase workspace/i)).toBeInTheDocument()
     // SAME generic CTA — no claim input, no tenant hint surfaced.
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
-  it('renders the generic Godinez login on a non-/mi-pase path', () => {
+  it('renders the generic workspace login on a non-/mi-pase path', () => {
     window.history.replaceState(null, '', '/')
     render(<LoginScreen />)
-    expect(screen.getByRole('heading', { name: 'Godinez Workspace' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to your workspace' })).toBeInTheDocument()
   })
 })

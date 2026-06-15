@@ -1,5 +1,6 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { Button } from '@/components/ui/button'
+import { BrandLockup } from '@/components/shell/BrandLockup'
 
 /**
  * Login screen (PR2b W2). Rendered by `AuthGate` when Privy is ready but the user
@@ -9,8 +10,9 @@ import { Button } from '@/components/ui/button'
  *
  * Branded entry (tenant-invites Wave 2, D3 — UX ONLY): the login screen renders
  * PRE-router (AuthGate is above the router/TenantProvider), so a branded variant is
- * selected from `window.location.pathname`, not a route param. `/mi-pase` shows
- * Mi-Pase-branded copy; every other path shows the generic Godinez copy.
+ * selected from `window.location.pathname`, not a route param. The PoktaEngine
+ * product lockup is always shown; `/mi-pase` adds Mi-Pase-specific copy beneath it,
+ * every other path shows the generic workspace copy.
  *
  * This is PURELY COSMETIC: it passes NOTHING into the claim/auth flow, sets no
  * TenantProvider state, and is not a tenant hint or trust input. The SAME
@@ -26,20 +28,21 @@ interface LoginBrand {
 
 /**
  * Pure, unit-testable brand selector. `/mi-pase` (and its sub-paths) → Mi-Pase
- * branding; anything else → the generic Godinez branding. UX only — derives copy,
+ * copy; anything else → the generic workspace copy. The PoktaEngine product
+ * lockup is rendered above this regardless of path. UX only — derives copy,
  * never authorization.
  */
 export function brandForPath(pathname: string): LoginBrand {
   if (pathname === '/mi-pase' || pathname.startsWith('/mi-pase/')) {
     return {
-      heading: 'Mi Pase',
-      subcopy: 'Sign in to your Mi Pase workspace.',
+      heading: 'Sign in to Mi Pase',
+      subcopy: 'Access your Mi Pase workspace. Sign in with your authorized email.',
     }
   }
   return {
-    heading: 'Godinez Workspace',
+    heading: 'Sign in to your workspace',
     subcopy:
-      'Sign in to access your workspace. Access is limited to provisioned team members.',
+      'Access is limited to provisioned team members. Sign in with your authorized email.',
   }
 }
 
@@ -53,6 +56,7 @@ export function LoginScreen() {
       role="main"
       className="flex min-h-screen flex-col items-center justify-center gap-8 bg-[var(--background)] px-6 text-center"
     >
+      <BrandLockup size="lg" />
       <div className="flex flex-col items-center gap-3">
         <h1 className="font-funnel text-2xl font-semibold text-[var(--foreground)]">
           {heading}

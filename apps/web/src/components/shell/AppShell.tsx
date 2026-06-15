@@ -2,6 +2,7 @@ import { Navigate, Outlet, useParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { TopBar } from '@/components/shell/TopBar'
 import { Sidebar } from '@/components/shell/Sidebar'
+import { BrandLockup } from '@/components/shell/BrandLockup'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { AccessDenied } from '@/components/auth/AccessDenied'
@@ -36,12 +37,21 @@ export function AppShell() {
   if (status === 'access-denied') return <AccessDenied />
   if (status === 'error' || !tenant) {
     // Sign-out escape hatch so a persistent load failure never strands the user.
+    // Branded, centered full-screen frame (pre-shell: the TopBar/Sidebar can't
+    // mount without a resolved tenant, so the lockup carries the branding here).
     return (
-      <ErrorState
-        title="Could not load your workspace"
-        onRetry={refetch}
-        onSignOut={() => void logout()}
-      />
+      <main
+        role="main"
+        className="flex min-h-screen flex-col items-center justify-center gap-8 bg-[var(--background)] px-6"
+      >
+        <BrandLockup size="lg" />
+        <ErrorState
+          title="Could not load your workspace"
+          onRetry={refetch}
+          onSignOut={() => void logout()}
+          className="border-0 bg-transparent"
+        />
+      </main>
     )
   }
 
