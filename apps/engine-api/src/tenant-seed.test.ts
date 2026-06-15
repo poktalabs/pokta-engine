@@ -207,10 +207,11 @@ describe('SEED — shipped TENANT_SEEDS set', () => {
     expect(() => validateSeeds(TENANT_SEEDS)).not.toThrow()
   })
 
-  it('seeds mi-pase ACTIVE and vino PENDING (vino must not resolve/dispatch yet)', () => {
+  it('seeds mi-pase and vino (the Tier-1 demo tenant) ACTIVE', () => {
     const byId = Object.fromEntries(TENANT_SEEDS.map((t) => [t.tenantId, t]))
     expect(byId['mi-pase']?.status).toBe('active')
-    expect(byId['vino']?.status).toBe('pending')
+    // vino was flipped pending→active to serve as the Notion-pipeline demo tenant.
+    expect(byId['vino']?.status).toBe('active')
   })
 
   it('every shipped tenant has a unique, charset-valid secretPrefix', () => {

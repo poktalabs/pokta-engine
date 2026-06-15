@@ -92,11 +92,15 @@ export const TENANT_SEEDS: TenantSeed[] = [
   },
   {
     tenantId: 'vino',
+    // DEMO TENANT (Tier-1): a sample design-build company that showcases the
+    // engine's call-intake → proposal (Notion CRM write) → approve → email loop.
+    // Real Notion creds (global NOTION_API_KEY / NOTION_CRM_DB_ID on the worker)
+    // make the CRM write live; without them the write fail-softs to 'simulated'.
     name: 'Vino Design Build',
-    status: 'pending', // NOT active — no real creds until PR3
+    status: 'active',
     currency: 'USD',
     locale: 'en',
-    branding: { name: 'Vino Design Build' },
+    branding: { name: 'Vino Design Build', badge: 'Demo' },
     allowedWorkflows: ['call-intake', 'proposal-step', 'send-step'],
     members: [],
     secretPrefix: 'VINO',
