@@ -1,5 +1,6 @@
 import type { RunContext } from '@godin-engine/contract'
 import { completeJSON } from '@godin-engine/llm'
+import { SCENARIOS, pickScenario } from '../demo-scenarios'
 
 export interface Extraction {
   client: string
@@ -52,32 +53,6 @@ Return JSON: {
   "crmEntry": { "account": string, "contactName": string, "opportunityName": string, "stage": string, "estimatedValue": string, "summary": string, "tags": string[] }
 }`
 
-const SCRIPTED: { extraction: Extraction; crmEntry: CrmEntry } = {
-  extraction: {
-    client: 'Acme Renovations (homeowner: the Delgados)',
-    contact: 'Maria Delgado',
-    projectType: 'Kitchen + primary bathroom remodel',
-    scopeHighlights: [
-      'Full kitchen gut: cabinets, quartz counters, island with seating',
-      'Primary bath: walk-in shower, double vanity, heated floor',
-      'Open up wall between kitchen and dining (verify load-bearing)',
-    ],
-    budgetSignal: 'Comfortable around $120–150k; wants a clear line-item breakdown',
-    timeline: 'Hoping to start in ~8 weeks; done before the holidays',
-    risks: ['Possible load-bearing wall', 'HOA approval for any exterior changes', 'Long lead time on chosen tile'],
-    nextSteps: ['Send line-item proposal', 'Schedule on-site measure', 'Confirm structural engineer for the wall'],
-  },
-  crmEntry: {
-    account: 'Acme Renovations — Delgado Residence',
-    contactName: 'Maria Delgado',
-    opportunityName: 'Delgado Kitchen + Primary Bath Remodel',
-    stage: 'Proposal',
-    estimatedValue: '$135,000',
-    summary:
-      'Discovery call covered a full kitchen gut and primary bath remodel with an open-concept wall removal. Budget comfort ~$120–150k. Next: line-item proposal + on-site measure; flag load-bearing wall and tile lead time.',
-    tags: ['remodel', 'kitchen', 'bath', 'proposal-ready'],
-  },
-}
 
 export async function run(
   input: { transcript: string; source?: string; scripted?: boolean; demoRef?: string },
@@ -90,18 +65,20 @@ export async function run(
   if (input.scripted) {
     ctx.logger.info('call-intake: scripted mode (no LLM — demo path)')
     const ref = input.demoRef
-    // Stamp the run's unique ref onto the CRM entry so each demo write is a distinct,
-    // recognizable Notion row (title suffix + tag) rather than a repeated identical one.
+    // Pick one of the varied demo scenarios (deterministically from the ref) so each
+    // run is a DIFFERENT believable opportunity, then stamp the unique ref onto the CRM
+    // entry (title suffix + tag) so the Notion row is unmistakably this visitor's.
+    const sc = pickScenario(ref)
     const crmEntry: CrmEntry = ref
       ? {
-          ...SCRIPTED.crmEntry,
-          opportunityName: `${SCRIPTED.crmEntry.opportunityName} · Demo ${ref}`,
-          tags: [...SCRIPTED.crmEntry.tags, `demo-${ref}`],
+          ...sc.crmEntry,
+          opportunityName: `${sc.crmEntry.opportunityName} · Demo ${ref}`,
+          tags: [...sc.crmEntry.tags, `demo-${ref}`],
         }
-      : SCRIPTED.crmEntry
+      : sc.crmEntry
     return {
       source,
-      extraction: SCRIPTED.extraction,
+      extraction: sc.extraction,
       crmEntry,
       generatedBy: 'scripted',
       scripted: true,
@@ -118,6 +95,7 @@ export async function run(
     return { source, extraction: data.extraction, crmEntry: data.crmEntry, generatedBy: 'llm' }
   } catch (e) {
     ctx.logger.info(`call-intake: LLM unavailable (${(e as Error).message}); using scripted draft`)
-    return { source, ...SCRIPTED, generatedBy: 'scripted' }
+    const sc = SCENARIOS[0]!
+    return { source, extraction: sc.extraction, crmEntry: sc.crmEntry, generatedBy: 'scripted' }
   }
 }

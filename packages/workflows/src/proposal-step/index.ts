@@ -2,6 +2,7 @@ import type { IntegrationResult, RunContext } from '@godin-engine/contract'
 import { completeJSON } from '@godin-engine/llm'
 import { commitCrmEntry } from '@godin-engine/integrations'
 import type { CrmEntry, Extraction } from '../call-intake'
+import { pickScenario } from '../demo-scenarios'
 
 export interface ProposalLineItem {
   name: string
@@ -99,7 +100,7 @@ async function commitCrm(crm: CrmEntry, ctx: RunContext): Promise<IntegrationRes
 }
 
 export async function run(
-  input: IntakeArtifact & { scripted?: boolean },
+  input: IntakeArtifact & { scripted?: boolean; demoRef?: string },
   ctx: RunContext,
 ): Promise<ProposalOutput> {
   // 1. Draft the proposal + email FIRST. This is the artifact gate 2 reviews;
@@ -109,12 +110,13 @@ export async function run(
   let generatedBy: 'llm' | 'scripted'
   if (input.scripted) {
     // Demo / no-LLM mode (threaded from call-intake via the gate-1 artifact): use
-    // the deterministic scripted draft, ZERO LLM call. The Notion CRM write below
-    // STILL runs (real side effect) — only the drafting is short-circuited.
+    // the SAME varied scenario call-intake picked (same demoRef → same scenario), so
+    // the proposal + email match the CRM row. ZERO LLM call. The Notion CRM write
+    // below STILL runs (real side effect) — only the drafting is short-circuited.
     ctx.logger.info('proposal-step: scripted mode (no LLM — demo path)')
-    const s = scripted(input.crmEntry, input.extraction)
-    proposal = s.proposal
-    email = s.email
+    const sc = pickScenario(input.demoRef)
+    proposal = sc.proposal
+    email = sc.email
     generatedBy = 'scripted'
   } else {
     try {
