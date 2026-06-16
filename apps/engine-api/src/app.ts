@@ -321,6 +321,10 @@ export function buildApp(opts: BuildAppOptions = {}): Hono {
   app.use('/dashboard/*', op)
   app.use('/console', op)
   app.use('/console/*', op)
+  // The demo UI is the Vite app's public /demo route (a different origin), so the
+  // demo data API needs browser CORS (same fail-closed allowlist as /v1). Mounted
+  // before mountDemo so the unauthenticated OPTIONS preflight is answered here.
+  app.use('/demo/api/*', corsMiddleware(opts.corsOrigins))
   mountDemo(app)
   mountDashboard(app)
   mountConsole(app)

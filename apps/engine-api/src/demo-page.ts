@@ -27,13 +27,15 @@ export function demoOpsPage(runs: any[], approvals: any[]): string {
     <td class="muted">${escH(ts(a.createdAt))}</td></tr>`).join('')
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>godin-engine · ops</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<title>PoktaEngine · ops</title>
+<link rel="icon" href="https://app.pokta.xyz/favicon.svg" type="image/svg+xml" />
+<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@600&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   body{margin:0;background:#0b0d12;color:#e7ebf2;font-family:Inter,system-ui,sans-serif}
   .wrap{max-width:1000px;margin:0 auto;padding:28px 22px 60px}
   a{color:#5b9bff;text-decoration:none}
-  h1{font-size:20px;margin:0 0 2px}h1 b{color:#f5b544}
+  h1{font-size:20px;margin:0 0 2px;font-family:'Funnel Display',Inter,sans-serif;letter-spacing:-.02em}
+  h1 .p{color:#fff}h1 .e{color:#f5b544}
   .sub{color:#8b94a6;font-size:13px;margin-bottom:22px}
   h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:#8b94a6;margin:26px 0 8px}
   table{width:100%;border-collapse:collapse;font-size:13px;background:#14181f;border:1px solid #232a36;border-radius:12px;overflow:hidden}
@@ -44,7 +46,7 @@ export function demoOpsPage(runs: any[], approvals: any[]): string {
   .muted{color:#8b94a6}
   .empty{color:#8b94a6;font-size:13px;padding:14px}
 </style></head><body><div class="wrap">
-  <h1>godin<b>·</b>engine — ops</h1>
+  <h1><span class="p">Pokta</span><span class="e">Engine</span> — ops</h1>
   <div class="sub">Read-only. Live rows from the engine's own Postgres. <a href="/demo">← back to demo</a></div>
   <h2>Runs · engine_runs</h2>
   <table><tr><th>workflow</th><th>status</th><th>consumer</th><th>run</th><th>parent</th><th>created (UTC)</th></tr>${runRows || '<tr><td class="empty" colspan="6">no runs yet</td></tr>'}</table>
@@ -60,10 +62,11 @@ export function demoPage(): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>godin-engine · Vino call-to-proposal</title>
+<title>PoktaEngine · Live demo</title>
+<link rel="icon" href="https://app.pokta.xyz/favicon.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#0b0d12; --panel:#14181f; --panel2:#0f131a; --border:#232a36;
@@ -75,8 +78,11 @@ export function demoPage(): string {
     font-family:Inter,system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
   .wrap{max-width:980px;margin:0 auto;padding:32px 24px 80px}
   header{display:flex;align-items:center;gap:14px;margin-bottom:6px}
-  .logo{font-weight:700;font-size:20px;letter-spacing:-.02em}
-  .logo b{color:var(--amber)}
+  .brand{display:flex;align-items:center;gap:9px}
+  .brand .mark{width:26px;height:26px;flex:none}
+  .brand .word{font-family:'Funnel Display',Inter,sans-serif;font-weight:600;font-size:21px;letter-spacing:-.02em}
+  .brand .word .p{color:#fff}
+  .brand .word .e{color:var(--amber)}
   .tag{color:var(--muted);font-size:13px}
   .live{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(62,207,142,.6);animation:pulse 2s infinite}
@@ -154,7 +160,7 @@ export function demoPage(): string {
   a.src{color:var(--blue);text-decoration:none}
 
   /* drawer */
-  .drawer-toggle{position:fixed;top:16px;left:16px;z-index:40;background:var(--panel);border:1px solid var(--border);color:var(--text);font-weight:600;font-size:13px;padding:9px 14px;border-radius:10px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.35);transition:.15s}
+  .drawer-toggle{position:fixed;bottom:16px;left:16px;z-index:40;background:var(--panel);border:1px solid var(--border);color:var(--text);font-weight:600;font-size:13px;padding:9px 14px;border-radius:10px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.35);transition:.15s}
   .drawer-toggle:hover{border-color:var(--amber);color:var(--amber)}
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:.25s;z-index:45}
   .scrim.open{opacity:1;pointer-events:auto}
@@ -199,8 +205,15 @@ export function demoPage(): string {
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">godin<b>·</b>engine</div>
-    <div class="tag">control plane · governed agent pipelines</div>
+    <span class="brand">
+      <svg class="mark" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Pokta Labs">
+        <mask id="plm" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><circle cx="512" cy="512" r="511.5" fill="#F8F8F8" stroke="#FF9900"/></mask>
+        <g mask="url(#plm)"><circle cx="512" cy="512" r="511.5" fill="#FF9900" stroke="#FF9900"/><path d="M-367 1165.51L428.508 370" stroke="#C11816" stroke-width="128"/><path d="M-284 -368L511.508 427.508" stroke="#C11816" stroke-width="128"/><line x1="-512" y1="342" x2="512" y2="342" stroke="#0E092A" stroke-width="128"/><line x1="448" y1="1302" x2="448" y2="278" stroke="#0E092A" stroke-width="128"/></g>
+        <circle cx="671.5" cy="352.5" r="287.5" fill="#0E092A"/><circle cx="671.5" cy="352.5" r="164.414" fill="#C11816"/>
+      </svg>
+      <span class="word"><span class="p">Pokta</span><span class="e">Engine</span></span>
+    </span>
+    <div class="tag">governed agent pipelines · live demo</div>
     <div class="live"><span class="dot"></span> live</div>
   </header>
 
@@ -362,10 +375,10 @@ function renderDrawer(state){
   const gb=state?.runsByWf?.['call-intake']?.output?.generatedBy;
   const modepill = gb==='llm'?'<span class="pill live">drafting live</span>':(gb==='scripted'?'<span class="pill scripted">scripted fallback</span>':'');
   let h='<h2>Under the hood</h2>'+
-    '<div class="lead">What\\'s running in <b>godin-engine</b> vs. where your systems plug in.</div>'+
+    '<div class="lead">What\\'s running in <b>PoktaEngine</b> vs. where your systems plug in.</div>'+
     '<div class="model">LLM <code>'+esc(MODEL)+'</code> '+modepill+'</div>'+
     '<div class="legend"><span><span class="tag impl">IMPLEMENTED</span> in the engine</span><span><span class="tag integ">INTEGRATION</span> your system</span></div>'+
-    '<div class="sech">Pipeline — implemented in godin-engine</div>';
+    '<div class="sech">Pipeline — implemented in PoktaEngine</div>';
   FLOW_STEPS.forEach((s,i)=>{
     const cls=st[i]===2?'done':(st[i]===1?'active':'');
     const mark=st[i]===2?'✓':(st[i]===1?'◜':(i+1));
