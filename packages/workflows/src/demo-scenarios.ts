@@ -2,14 +2,17 @@ import type { CrmEntry, Extraction } from './call-intake'
 import type { ClientEmail, Proposal } from './proposal-step'
 
 /**
- * Demo scenario pool. The public /demo runs no-LLM (scripted), so without variety
- * every CRM row would be identical. Each run picks one of these complete, believable
- * Vino Design Build opportunities (deterministically from the run's demoRef), so the
- * Notion rows look like distinct real deals — not a repeated scripted entry. The
- * per-run demoRef is then stamped on top for guaranteed uniqueness.
+ * Demo scenario GENERATOR. The public /demo runs no-LLM (scripted), so without
+ * variety every CRM row would be identical. Instead of a handful of fixed
+ * scenarios, we synthesize a believable Vino Design Build deal per run:
+ *   - a homeowner from a list of 23 names,
+ *   - a random subset (2–4) of 10 services, each with a base price,
+ *   - a per-run price multiplier f so totals vary (kitchen+bath ≈ f(135k)).
  *
- * Both call-intake (extraction + crmEntry) and proposal-step (proposal + email) pick
- * the SAME scenario from the same demoRef, so the whole chain stays consistent.
+ * It is SEEDED from the run's demoRef and fully pure (no Date.now/Math.random),
+ * so call-intake (extraction + crmEntry) and proposal-step (proposal + email)
+ * pick the SAME deal from the same ref and stay consistent. The ref is then
+ * stamped on top (in call-intake) for guaranteed uniqueness.
  */
 export interface DemoScenario {
   extraction: Extraction
@@ -18,238 +21,176 @@ export interface DemoScenario {
   email: ClientEmail
 }
 
-export const SCENARIOS: DemoScenario[] = [
-  {
-    extraction: {
-      client: 'Delgado Residence (homeowners: Maria & Tomás Delgado)',
-      contact: 'Maria Delgado',
-      projectType: 'Kitchen + primary bathroom remodel',
-      scopeHighlights: [
-        'Full kitchen gut: cabinets, quartz counters, island with seating',
-        'Primary bath: walk-in shower, double vanity, heated floor',
-        'Open the wall between kitchen and dining (verify load-bearing)',
-      ],
-      budgetSignal: 'Comfortable around $120–150k; wants a clear line-item breakdown',
-      timeline: 'Start in ~8 weeks; done before the holidays',
-      risks: ['Possible load-bearing wall', 'Long lead time on chosen tile'],
-      nextSteps: ['Send line-item proposal', 'Schedule on-site measure', 'Confirm structural engineer'],
-    },
-    crmEntry: {
-      account: 'Delgado Residence — Oak Park',
-      contactName: 'Maria Delgado',
-      opportunityName: 'Delgado Kitchen + Primary Bath Remodel',
-      stage: 'Proposal',
-      estimatedValue: '$135,000',
-      summary:
-        'Discovery call covered a full kitchen gut and primary bath remodel with an open-concept wall removal. Budget ~$120–150k. Next: line-item proposal + on-site measure.',
-      tags: ['remodel', 'kitchen', 'bath', 'proposal-ready'],
-    },
-    proposal: {
-      title: 'Proposal — Delgado Kitchen + Primary Bath Remodel',
-      summary: 'Design-build proposal for a full kitchen and primary bath remodel at the Delgado residence.',
-      lineItems: [
-        { name: 'Kitchen remodel', detail: 'Cabinetry, quartz counters, island w/ seating, appliance install', price: '$72,000' },
-        { name: 'Primary bath remodel', detail: 'Walk-in shower, double vanity, heated floor, tile', price: '$38,000' },
-        { name: 'Wall removal + structural', detail: 'Open kitchen/dining wall; engineer + beam', price: '$15,000' },
-        { name: 'Design + project management', detail: 'Drawings, selections, permits, coordination', price: '$10,000' },
-      ],
-      subtotal: '$135,000',
-      timelineText: 'Approx. 10–12 weeks from permit approval; targeting completion before the holidays.',
-      exclusions: ['HOA fees', 'Client-supplied appliances', 'Unforeseen structural beyond noted wall'],
-    },
-    email: {
-      to: 'maria.delgado@example.com',
-      subject: 'Your remodel proposal — Delgado Kitchen + Primary Bath',
-      body: `Hi Maria,\n\nThanks for the great conversation. Based on what you shared, we've put together a line-item proposal for your kitchen and primary bath remodel, including opening up the kitchen/dining wall — estimated at $135,000 over a 10–12 week timeline.\n\nThe attached proposal breaks down every line item. Once you've had a look, we'd love to schedule the on-site measure and confirm the structural assessment.\n\nWarmly,\nThe Vino Design Build Team`,
-    },
-  },
-  {
-    extraction: {
-      client: 'Okafor Residence (homeowners: Ada & Chidi Okafor)',
-      contact: 'Ada Okafor',
-      projectType: 'Whole-home renovation of a 1910 Victorian',
-      scopeHighlights: [
-        'Re-plumb and re-wire throughout; new HVAC',
-        'Restore original millwork + refinish floors',
-        'New kitchen and two bathrooms; finish the attic',
-      ],
-      budgetSignal: 'Around $280–340k; financing in place',
-      timeline: 'Flexible; ready to start in the spring',
-      risks: ['Knob-and-tube wiring', 'Possible asbestos in old insulation', 'Permit timeline for a historic district'],
-      nextSteps: ['Full design phase', 'Historic-district pre-review', 'Hazmat inspection'],
-    },
-    crmEntry: {
-      account: 'Okafor Residence — Evanston',
-      contactName: 'Ada Okafor',
-      opportunityName: 'Okafor Whole-Home Victorian Renovation',
-      stage: 'Discovery',
-      estimatedValue: '$310,000',
-      summary:
-        'Whole-home renovation of a 1910 Victorian: re-plumb/re-wire, new HVAC, kitchen + two baths, restore millwork, finish attic. Historic district. Spring start.',
-      tags: ['whole-home', 'historic', 'renovation', 'high-value'],
-    },
-    proposal: {
-      title: 'Proposal — Okafor Whole-Home Victorian Renovation',
-      summary: 'Phased design-build renovation of a 1910 Victorian, preserving original character while modernizing systems.',
-      lineItems: [
-        { name: 'Systems: plumbing, electrical, HVAC', detail: 'Full re-plumb + re-wire, new high-efficiency HVAC', price: '$118,000' },
-        { name: 'Kitchen + two bathrooms', detail: 'New kitchen and two full baths, period-appropriate fixtures', price: '$96,000' },
-        { name: 'Millwork restoration + floors', detail: 'Restore trim/casework, refinish hardwood throughout', price: '$52,000' },
-        { name: 'Attic finish + design/PM', detail: 'Conditioned attic suite, drawings, permits, historic review', price: '$44,000' },
-      ],
-      subtotal: '$310,000',
-      timelineText: 'Phased over ~7–9 months from permit approval, sequenced to keep part of the home livable.',
-      exclusions: ['Hazmat abatement (priced after inspection)', 'Landscape/exterior masonry', 'Appliance allowances over budget'],
-    },
-    email: {
-      to: 'ada.okafor@example.com',
-      subject: 'Your whole-home renovation proposal — Okafor Victorian',
-      body: `Hi Ada,\n\nWhat a special house. Here's our phased proposal to modernize the systems and kitchen/baths while restoring the original millwork and floors — estimated at $310,000, sequenced over 7–9 months so you keep part of the home livable.\n\nNext we'd line up the historic-district pre-review and a hazmat inspection before we finalize. Take a look and let's pick a design-phase start date.\n\nWarmly,\nThe Vino Design Build Team`,
-    },
-  },
-  {
-    extraction: {
-      client: 'Tanaka Residence (homeowner: Kenji Tanaka)',
-      contact: 'Kenji Tanaka',
-      projectType: 'Detached backyard ADU / in-law suite',
-      scopeHighlights: [
-        'New ~600 sq ft detached ADU with kitchenette + full bath',
-        'Separate entrance, mini-split HVAC',
-        'Tie into existing utilities',
-      ],
-      budgetSignal: 'Targeting $180–220k',
-      timeline: 'Wants it done within 6 months for an aging parent',
-      risks: ['Setback / zoning variance', 'Utility tie-in distance', 'Soil/grading at the rear lot'],
-      nextSteps: ['Zoning feasibility check', 'Survey + site plan', 'Schematic design'],
-    },
-    crmEntry: {
-      account: 'Tanaka Residence — Berwyn',
-      contactName: 'Kenji Tanaka',
-      opportunityName: 'Tanaka Backyard ADU (In-Law Suite)',
-      stage: 'Qualification',
-      estimatedValue: '$210,000',
-      summary:
-        'Detached ~600 sq ft ADU with kitchenette, full bath, separate entrance for an aging parent. 6-month target. Needs zoning feasibility + survey.',
-      tags: ['adu', 'new-construction', 'accessory-dwelling'],
-    },
-    proposal: {
-      title: 'Proposal — Tanaka Backyard ADU',
-      summary: 'Turnkey detached accessory dwelling unit designed for comfortable single-level living.',
-      lineItems: [
-        { name: 'Foundation + shell', detail: 'Slab, framing, roofing, siding, windows/doors', price: '$92,000' },
-        { name: 'Interior + kitchenette + bath', detail: 'Finishes, cabinets, full bath, accessible fixtures', price: '$64,000' },
-        { name: 'Mechanical + utility tie-in', detail: 'Mini-split HVAC, electrical, plumbing, sewer/water connect', price: '$34,000' },
-        { name: 'Design, survey + permits', detail: 'Zoning feasibility, survey, drawings, permitting', price: '$20,000' },
-      ],
-      subtotal: '$210,000',
-      timelineText: 'Approx. 5–6 months from permit approval, weather permitting.',
-      exclusions: ['Zoning variance fees if required', 'Landscaping/fencing', 'Major rear-lot grading'],
-    },
-    email: {
-      to: 'kenji.tanaka@example.com',
-      subject: 'Your backyard ADU proposal — Tanaka in-law suite',
-      body: `Hi Kenji,\n\nThanks for walking me through the plan for your parent's suite. Here's a turnkey proposal for a ~600 sq ft detached ADU with a kitchenette and accessible full bath — estimated at $210,000 over about 5–6 months.\n\nOur first step is a quick zoning feasibility check and a survey so we can confirm setbacks. Have a look and we'll get that scheduled.\n\nWarmly,\nThe Vino Design Build Team`,
-    },
-  },
-  {
-    extraction: {
-      client: 'Brennan Residence (homeowners: Shauna & Paul Brennan)',
-      contact: 'Shauna Brennan',
-      projectType: 'Primary suite addition + rear deck',
-      scopeHighlights: [
-        'Second-story primary suite addition with walk-in closet',
-        'Spa bath with soaking tub',
-        'New 400 sq ft rear deck off the kitchen',
-      ],
-      budgetSignal: 'Around $150–180k',
-      timeline: 'Hoping to start late summer',
-      risks: ['Roof tie-in complexity', 'Existing foundation load capacity', 'Deck footings near the property line'],
-      nextSteps: ['Structural assessment', 'Schematic design', 'Proposal'],
-    },
-    crmEntry: {
-      account: 'Brennan Residence — La Grange',
-      contactName: 'Shauna Brennan',
-      opportunityName: 'Brennan Primary Suite Addition + Deck',
-      stage: 'Proposal',
-      estimatedValue: '$165,000',
-      summary:
-        'Second-story primary suite addition (walk-in closet + spa bath) plus a 400 sq ft rear deck. Budget ~$150–180k. Late-summer start. Needs structural assessment.',
-      tags: ['addition', 'primary-suite', 'deck'],
-    },
-    proposal: {
-      title: 'Proposal — Brennan Primary Suite Addition + Deck',
-      summary: 'A second-story primary suite addition with a spa bath, plus a connected rear deck.',
-      lineItems: [
-        { name: 'Suite addition shell', detail: 'Framing, roof tie-in, windows, insulation, drywall', price: '$78,000' },
-        { name: 'Spa bath + walk-in closet', detail: 'Soaking tub, tile shower, double vanity, custom closet', price: '$46,000' },
-        { name: 'Rear deck', detail: '400 sq ft composite deck, footings, railings, stairs', price: '$24,000' },
-        { name: 'Structural, design + permits', detail: 'Engineering, drawings, permitting, PM', price: '$17,000' },
-      ],
-      subtotal: '$165,000',
-      timelineText: 'Approx. 12–14 weeks from permit approval.',
-      exclusions: ['Foundation reinforcement if required by engineer', 'Landscaping under the deck', 'Furniture'],
-    },
-    email: {
-      to: 'shauna.brennan@example.com',
-      subject: 'Your addition proposal — Brennan primary suite + deck',
-      body: `Hi Shauna,\n\nLoved the vision for the new primary suite. Attached is our proposal for the second-story addition with a spa bath and walk-in closet, plus the rear deck off the kitchen — estimated at $165,000 over about 12–14 weeks.\n\nThe one thing we'll confirm first is a structural assessment for the addition's load. Take a look and we'll line that up.\n\nWarmly,\nThe Vino Design Build Team`,
-    },
-  },
-  {
-    extraction: {
-      client: 'Russo Residence (homeowners: Gina & Marco Russo)',
-      contact: 'Marco Russo',
-      projectType: 'Basement finish: family room, wet bar, home theater',
-      scopeHighlights: [
-        'Finish ~900 sq ft basement: family room + home theater',
-        'Wet bar with beverage fridge',
-        'Egress window + full bathroom',
-      ],
-      budgetSignal: 'Around $85–110k',
-      timeline: 'No rush; sometime this year',
-      risks: ['Moisture / waterproofing', 'Egress window excavation', 'Low ceiling height in one zone'],
-      nextSteps: ['Moisture assessment', 'Layout design', 'Proposal'],
-    },
-    crmEntry: {
-      account: 'Russo Residence — Naperville',
-      contactName: 'Marco Russo',
-      opportunityName: 'Russo Basement Finish + Home Theater',
-      stage: 'Discovery',
-      estimatedValue: '$95,000',
-      summary:
-        'Finish a ~900 sq ft basement: family room, home theater, wet bar, egress window, full bath. Budget ~$85–110k. Flexible timeline. Needs moisture assessment.',
-      tags: ['basement', 'finish', 'home-theater'],
-    },
-    proposal: {
-      title: 'Proposal — Russo Basement Finish + Home Theater',
-      summary: 'A finished basement built around a family room, home theater, and wet bar.',
-      lineItems: [
-        { name: 'Framing, insulation, drywall', detail: 'Full finish of ~900 sq ft, sound insulation at theater', price: '$38,000' },
-        { name: 'Home theater + family room', detail: 'Wiring, recessed lighting, built-ins, flooring', price: '$26,000' },
-        { name: 'Wet bar + full bathroom', detail: 'Bar cabinetry, beverage fridge, sink, full bath', price: '$22,000' },
-        { name: 'Egress, design + permits', detail: 'Egress window + well, drawings, permitting', price: '$9,000' },
-      ],
-      subtotal: '$95,000',
-      timelineText: 'Approx. 8–10 weeks from permit approval.',
-      exclusions: ['Exterior waterproofing if assessment requires it', 'AV equipment', 'Bar appliances over allowance'],
-    },
-    email: {
-      to: 'marco.russo@example.com',
-      subject: 'Your basement proposal — Russo family room + theater',
-      body: `Hi Marco,\n\nThanks for the tour. Here's our proposal to finish the basement into a family room, home theater, and wet bar with a full bath — estimated at $95,000 over about 8–10 weeks.\n\nBefore we start we'll do a quick moisture assessment so the finish lasts. Have a look and let us know what you think.\n\nWarmly,\nThe Vino Design Build Team`,
-    },
-  },
+interface Contact {
+  first: string
+  last: string
+}
+const NAMES: Contact[] = [
+  { first: 'Maria', last: 'Delgado' },
+  { first: 'Ada', last: 'Okafor' },
+  { first: 'Kenji', last: 'Tanaka' },
+  { first: 'Shauna', last: 'Brennan' },
+  { first: 'Marco', last: 'Russo' },
+  { first: 'Priya', last: 'Nair' },
+  { first: 'Daniel', last: 'Cohen' },
+  { first: 'Leila', last: 'Haddad' },
+  { first: 'Grace', last: 'Kim' },
+  { first: 'Hassan', last: 'Ali' },
+  { first: 'Sofia', last: 'Marquez' },
+  { first: 'Tom', last: 'Becker' },
+  { first: 'Nina', last: 'Petrov' },
+  { first: 'Andre', last: 'Dubois' },
+  { first: 'Mei', last: 'Lin' },
+  { first: 'Omar', last: 'Farouk' },
+  { first: 'Claire', last: 'Whitman' },
+  { first: 'Diego', last: 'Santos' },
+  { first: 'Hannah', last: 'Schultz' },
+  { first: 'Ravi', last: 'Patel' },
+  { first: 'Bianca', last: 'Rossi' },
+  { first: 'Eli', last: 'Greenberg' },
+  { first: 'Yuki', last: 'Watanabe' },
 ]
 
-/** Deterministic per-run scenario pick from the demo ref (varied across runs). */
-export function scenarioIndex(ref?: string): number {
-  if (!ref) return 0
-  let h = 0
-  for (let i = 0; i < ref.length; i++) h = (h * 31 + ref.charCodeAt(i)) >>> 0
-  return h % SCENARIOS.length
-}
+const NEIGHBORHOODS = [
+  'Oak Park', 'Evanston', 'Berwyn', 'La Grange', 'Naperville', 'Hinsdale',
+  'Wilmette', 'Elmhurst', 'Glen Ellyn', 'Park Ridge',
+]
 
-/** The scenario for a run, falling back to the first when no ref / out of range. */
+interface Service {
+  word: string // for the opportunity name
+  label: string // proposal line-item name
+  detail: string
+  base: number // base price the per-run multiplier scales
+  tag: string
+}
+const SERVICES: Service[] = [
+  { word: 'Kitchen', label: 'Kitchen remodel', detail: 'Cabinetry, quartz counters, island w/ seating, appliance install', base: 72_000, tag: 'kitchen' },
+  { word: 'Primary Bath', label: 'Primary bath remodel', detail: 'Walk-in shower, double vanity, heated floor, tile', base: 38_000, tag: 'bath' },
+  { word: 'Systems Upgrade', label: 'Plumbing, electrical + HVAC', detail: 'Full re-plumb + re-wire, high-efficiency HVAC', base: 96_000, tag: 'systems' },
+  { word: 'Backyard ADU', label: 'Detached ADU', detail: '~600 sq ft suite: kitchenette, full bath, separate entrance', base: 180_000, tag: 'adu' },
+  { word: 'Primary Suite Addition', label: 'Primary suite addition', detail: 'Second-story suite, walk-in closet, spa bath', base: 84_000, tag: 'addition' },
+  { word: 'Basement Finish', label: 'Basement finish', detail: 'Family room, egress window, full bath, finishes', base: 64_000, tag: 'basement' },
+  { word: 'Deck', label: 'Rear deck', detail: 'Composite deck, footings, railings, stairs', base: 24_000, tag: 'deck' },
+  { word: 'Home Theater', label: 'Home theater', detail: 'Soundproofing, wiring, built-ins, recessed lighting', base: 28_000, tag: 'home-theater' },
+  { word: 'Roof + Siding', label: 'Roof + siding', detail: 'Architectural shingle roof, fiber-cement siding', base: 46_000, tag: 'exterior' },
+  { word: 'Outdoor Living', label: 'Hardscape + landscaping', detail: 'Patio, retaining walls, planting, lighting', base: 32_000, tag: 'landscape' },
+]
+
+const TIMELINES = [
+  'Start in ~8 weeks; done before the holidays',
+  'Flexible; ready to start in the spring',
+  'Wants it done within ~6 months',
+  'Hoping to start late summer',
+  'No rush; sometime this year',
+]
+const RISKS = [
+  'Possible load-bearing wall',
+  'Long lead time on selected finishes',
+  'Permit timeline',
+  'Existing foundation load capacity',
+  'Moisture / waterproofing',
+  'Utility tie-in distance',
+  'Historic-district review',
+  'Knob-and-tube wiring',
+]
+const STAGES = ['Discovery', 'Qualification', 'Proposal']
+
+// ── seeded RNG (mulberry32) — pure, deterministic from the demo ref ──────────
+function seedFrom(ref?: string): number {
+  if (!ref) return 1
+  let h = 2166136261
+  for (let i = 0; i < ref.length; i++) {
+    h ^= ref.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+function mulberry32(seed: number): () => number {
+  let a = seed || 1
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+const usd = (n: number): string => `$${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
+const roundTo = (n: number, step: number): number => Math.round(n / step) * step
+
+/** Synthesize a complete, believable deal, deterministically from the demo ref. */
 export function pickScenario(ref?: string): DemoScenario {
-  return SCENARIOS[scenarioIndex(ref)] ?? SCENARIOS[0]!
+  const rng = mulberry32(seedFrom(ref))
+  const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)]!
+
+  const contact = pick(NAMES)
+  const neighborhood = pick(NEIGHBORHOODS)
+  const stage = pick(STAGES)
+  const timeline = pick(TIMELINES)
+
+  // 2–4 distinct services.
+  const count = 2 + Math.floor(rng() * 3)
+  const pool = [...SERVICES]
+  const chosen: Service[] = []
+  for (let i = 0; i < count && pool.length; i++) {
+    chosen.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]!)
+  }
+
+  // f(x): a per-run multiplier (0.85–1.30) applied to each service base price.
+  const factor = 0.85 + rng() * 0.45
+  const lineItems = chosen.map((s) => ({
+    name: s.label,
+    detail: s.detail,
+    price: usd(roundTo(s.base * factor, 500)),
+    _n: roundTo(s.base * factor, 500),
+  }))
+  const servicesSubtotal = lineItems.reduce((sum, li) => sum + li._n, 0)
+  // Design + PM as 8–12% of the build subtotal.
+  const designPm = roundTo(servicesSubtotal * (0.08 + rng() * 0.04), 500)
+  const total = servicesSubtotal + designPm
+
+  const projectType = chosen.map((s) => s.word).join(' + ')
+  const opportunityName = `${contact.last} ${projectType}`
+  const account = `${contact.last} Residence — ${neighborhood}`
+  const tags = ['design-build', ...chosen.map((s) => s.tag)]
+
+  const proposalLineItems = [
+    ...lineItems.map(({ name, detail, price }) => ({ name, detail, price })),
+    { name: 'Design + project management', detail: 'Drawings, selections, permits, on-site coordination', price: usd(designPm) },
+  ]
+
+  return {
+    extraction: {
+      client: `${contact.last} Residence (${contact.first} ${contact.last})`,
+      contact: `${contact.first} ${contact.last}`,
+      projectType,
+      scopeHighlights: chosen.map((s) => s.detail),
+      budgetSignal: `Around ${usd(total * 0.92)}–${usd(total * 1.08)}`,
+      timeline,
+      risks: [pick(RISKS), pick(RISKS)].filter((r, i, a) => a.indexOf(r) === i),
+      nextSteps: ['Send line-item proposal', 'Schedule on-site measure', 'Confirm scope + selections'],
+    },
+    crmEntry: {
+      account,
+      contactName: `${contact.first} ${contact.last}`,
+      opportunityName,
+      stage,
+      estimatedValue: usd(total),
+      summary: `Discovery call: ${projectType.toLowerCase()} at the ${contact.last} residence in ${neighborhood}. Budget ~${usd(total)}. ${timeline}.`,
+      tags,
+    },
+    proposal: {
+      title: `Proposal — ${opportunityName}`,
+      summary: `Design-build proposal for ${projectType.toLowerCase()} at the ${contact.last} residence.`,
+      lineItems: proposalLineItems,
+      subtotal: usd(total),
+      timelineText: `Approx. ${8 + chosen.length * 2}–${12 + chosen.length * 2} weeks from permit approval.`,
+      exclusions: ['Permit/HOA fees', 'Client-supplied fixtures over allowance', 'Unforeseen structural / hazmat'],
+    },
+    email: {
+      to: `${contact.first}.${contact.last}@example.com`.toLowerCase(),
+      subject: `Your proposal — ${opportunityName}`,
+      body: `Hi ${contact.first},\n\nThanks for the great conversation. Based on what you shared, we've put together a line-item proposal for your ${projectType.toLowerCase()} — estimated at ${usd(total)}.\n\nThe attached proposal breaks down every line item. Once you've had a look, we'd love to schedule the on-site measure.\n\nWarmly,\nThe Vino Design Build Team`,
+    },
+  }
 }

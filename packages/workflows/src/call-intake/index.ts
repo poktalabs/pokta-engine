@@ -1,6 +1,6 @@
 import type { RunContext } from '@godin-engine/contract'
 import { completeJSON } from '@godin-engine/llm'
-import { SCENARIOS, pickScenario } from '../demo-scenarios'
+import { pickScenario } from '../demo-scenarios'
 
 export interface Extraction {
   client: string
@@ -95,7 +95,7 @@ export async function run(
     return { source, extraction: data.extraction, crmEntry: data.crmEntry, generatedBy: 'llm' }
   } catch (e) {
     ctx.logger.info(`call-intake: LLM unavailable (${(e as Error).message}); using scripted draft`)
-    const sc = SCENARIOS[0]!
+    const sc = pickScenario()
     return { source, extraction: sc.extraction, crmEntry: sc.crmEntry, generatedBy: 'scripted' }
   }
 }
