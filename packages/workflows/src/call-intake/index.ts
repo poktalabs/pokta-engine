@@ -33,6 +33,13 @@ export interface IntakeOutput {
    * chain stays LLM-free, not just step 1.
    */
   scripted?: boolean
+  /**
+   * Per-run demo ref (e.g. "A7F3"). Baked into the scripted CRM opportunity title +
+   * a tag so each public demo run writes a UNIQUE, recognizable Notion row (not a
+   * repeated identical scripted entry). Surfaced in the demo UI so the visitor can
+   * find THEIR row in Notion.
+   */
+  demoRef?: string
 }
 
 const SYSTEM = `You are an operations agent for Vino Design Build, a residential construction / design-build firm.
@@ -73,7 +80,7 @@ const SCRIPTED: { extraction: Extraction; crmEntry: CrmEntry } = {
 }
 
 export async function run(
-  input: { transcript: string; source?: string; scripted?: boolean },
+  input: { transcript: string; source?: string; scripted?: boolean; demoRef?: string },
   ctx: RunContext,
 ): Promise<IntakeOutput> {
   const source = input.source ?? 'Granola call'
@@ -82,7 +89,24 @@ export async function run(
   // an LLM request. `scripted: true` is echoed so it threads into proposal-step.
   if (input.scripted) {
     ctx.logger.info('call-intake: scripted mode (no LLM — demo path)')
-    return { source, ...SCRIPTED, generatedBy: 'scripted', scripted: true }
+    const ref = input.demoRef
+    // Stamp the run's unique ref onto the CRM entry so each demo write is a distinct,
+    // recognizable Notion row (title suffix + tag) rather than a repeated identical one.
+    const crmEntry: CrmEntry = ref
+      ? {
+          ...SCRIPTED.crmEntry,
+          opportunityName: `${SCRIPTED.crmEntry.opportunityName} · Demo ${ref}`,
+          tags: [...SCRIPTED.crmEntry.tags, `demo-${ref}`],
+        }
+      : SCRIPTED.crmEntry
+    return {
+      source,
+      extraction: SCRIPTED.extraction,
+      crmEntry,
+      generatedBy: 'scripted',
+      scripted: true,
+      demoRef: ref,
+    }
   }
   try {
     const data = await completeJSON<{ extraction: Extraction; crmEntry: CrmEntry }>({

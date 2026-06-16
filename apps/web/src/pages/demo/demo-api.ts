@@ -62,12 +62,12 @@ export class DemoApiError extends Error {
 const DECIDED_BY = 'You (demo)'
 
 export const demoApi = {
-  run: (transcript: string): Promise<{ rootRunId: string }> =>
+  run: (transcript: string): Promise<{ rootRunId: string; demoRef: string }> =>
     fetch(`${API}/demo/api/run`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ transcript }),
-    }).then((r) => asJson<{ rootRunId: string }>(r)),
+    }).then((r) => asJson<{ rootRunId: string; demoRef: string }>(r)),
 
   state: (rootRunId: string): Promise<DemoState> =>
     fetch(`${API}/demo/api/state/${rootRunId}`).then((r) => asJson<DemoState>(r)),
