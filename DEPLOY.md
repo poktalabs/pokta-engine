@@ -13,7 +13,7 @@ start only their app via `pnpm --filter …`.
 
 ## One-time setup (Railway dashboard)
 
-1. **New Project → Deploy from GitHub repo →** `poktalabs/godin-engine`.
+1. **New Project → Deploy from GitHub repo →** `poktalabs/pokta-engine`.
    This creates the first service. Rename it **`engine-api`**.
 2. **Add Postgres:** in the project, **New → Database → PostgreSQL**. It exposes
    `DATABASE_URL` on the Postgres service.
@@ -24,7 +24,7 @@ start only their app via `pnpm --filter …`.
      - `SERVICE_KEYS` = `godinez-studio:<strong-key>,landing-godinez:<strong-key>`
        **Do not leave this empty in production** — empty = DEV mode = open to anyone.
    - **Settings → Networking → Generate Domain** (this is your public URL).
-4. **Add the worker service:** **New → GitHub Repo →** same `poktalabs/godin-engine`.
+4. **Add the worker service:** **New → GitHub Repo →** same `poktalabs/pokta-engine`.
    Rename it **`worker`**.
    - **Config-as-code path:** `railway.worker.json`
    - **Variables:** `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (no domain, no SERVICE_KEYS)

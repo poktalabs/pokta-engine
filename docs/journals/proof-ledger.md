@@ -6,7 +6,7 @@ Claim supported:
 - The first client workflow was rewritten into the engine and merged with passing CI.
 
 Evidence:
-- PR #5 (`feat/m1-mi-pase-pricing` → `main`), squash-merged: github.com/poktalabs/godin-engine/pull/5
+- PR #5 (`feat/m1-mi-pase-pricing` → `main`), squash-merged: github.com/poktalabs/pokta-engine/pull/5
 - CI run on the PR: `test` check green (~47s) with a `postgres:16` service; first run failed at
   `pnpm/action-setup@v4` (doubled pnpm version) — fix commit `f803045`.
 - Local: `pnpm test` → 273/273 pass, 0 skipped.
