@@ -10,7 +10,7 @@
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
     "strict": true,
     "noEmit": true,
-    // Bundler resolution handles `@godin-engine/contract` from its ./src and the
+    // Bundler resolution handles `@pokta-engine/contract` from its ./src and the
     // `@/*` alias below — NO composite, NO project references (the repo is
     // source-only / noEmit everywhere; see M2 plan P0 sub-decision #1).
     "paths": {

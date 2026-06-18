@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { AlertOctagon, Lock } from 'lucide-react'
-import type { ErrorEnvelope, ErrorCode } from '@godin-engine/contract'
+import type { ErrorEnvelope, ErrorCode } from '@pokta-engine/contract'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 

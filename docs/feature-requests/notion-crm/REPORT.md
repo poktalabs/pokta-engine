@@ -26,8 +26,8 @@ workflow output.
   attempts the CRM write fail-soft (D3). Adds `crmResult: IntegrationResult` to
   `ProposalOutput`. A Notion failure records `status:'failed'` and continues —
   `run()` never throws, the proposal survives, gate 2 still opens.
-- `workflows/src/proposal-step/index.test.ts` (new) — mocks `@godin-engine/notion`
-  and `@godin-engine/llm`: ok path → `crmResult.status='ok'` with ref+url; throw
+- `workflows/src/proposal-step/index.test.ts` (new) — mocks `@pokta-engine/notion`
+  and `@pokta-engine/llm`: ok path → `crmResult.status='ok'` with ref+url; throw
   path → `status='failed'`, proposal still drafts, run resolves; verifies the
   approved `CrmEntry` is passed through to `commitCrmEntry`.
 

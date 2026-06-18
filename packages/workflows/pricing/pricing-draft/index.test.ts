@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 import type {
   Catalog,
   ShopifyClient,
   MercadoLibreClient,
   MLSearchResult,
-} from '@godin-engine/integrations'
+} from '@pokta-engine/integrations'
 
 import { run } from './index'
 import type { DesiredRow, WorkflowStateStore } from './state-store'

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { ChevronRight, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Pill, type PillStatus } from '@/components/ui/pill'
-import type { RunDetail } from '@godin-engine/contract'
+import type { RunDetail } from '@pokta-engine/contract'
 
 /**
  * Run-detail header: breadcrumb → serif run title → status pill + Re-run.

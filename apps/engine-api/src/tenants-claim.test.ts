@@ -4,7 +4,7 @@ import { generateKeyPair, exportSPKI, SignJWT } from 'jose'
 /**
  * POST /v1/tenants/claim — focused behavioral coverage (Wave 1 / §4, D4/D6, anti-enum).
  *
- * Hermetic: @godin-engine/db + @godin-engine/queue are MOCKED so nothing touches
+ * Hermetic: @pokta-engine/db + @pokta-engine/queue are MOCKED so nothing touches
  * Postgres or pg-boss; the Privy bearer verifier AND the verified-email resolver are
  * injected OFFLINE via buildApp({ auth, resolvePrivyEmails }) so no JWKS fetch and no
  * getUser network call ever happen. One token is also minted with a real ES256 jose
@@ -57,7 +57,7 @@ class FakeUniqueViolation extends Error {
   constraint = 'tenant_members_did_unique'
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -76,7 +76,7 @@ vi.mock('drizzle-orm', () => ({
   }),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // DID out of findTenantByMember's `eq(M.did, did)` where-marker.
   const didFromMemberJoin = (pred: unknown): string | undefined => {
     const p = pred as { eq?: [string, string] }

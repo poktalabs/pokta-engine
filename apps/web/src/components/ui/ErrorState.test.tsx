@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ErrorEnvelope } from '@godin-engine/contract'
+import type { ErrorEnvelope } from '@pokta-engine/contract'
 import { ErrorState } from './ErrorState'
 
 /**

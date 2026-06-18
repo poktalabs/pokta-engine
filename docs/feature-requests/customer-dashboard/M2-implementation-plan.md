@@ -20,7 +20,7 @@
 
 ```jsonc
 {
-  "name": "@godin-engine/web",
+  "name": "@pokta-engine/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -32,7 +32,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@godin-engine/contract": "workspace:*",      // shared API types — the contract seam (Bundler resolution to ./src)
+    "@pokta-engine/contract": "workspace:*",      // shared API types — the contract seam (Bundler resolution to ./src)
     "@privy-io/react-auth": "^3.28.0",             // pokta-care version (NOT patrimo's v2)
     "@radix-ui/react-slot": "^1.2.4",
     "@sentry/react": "^10.42.0",
@@ -127,11 +127,11 @@ This is the chain to staff first and protect. The two non-obvious additions to t
 
 ## P0 — Scaffold & Foundation
 
-**Goal:** A booting `@godin-engine/web` Vite SPA inside the existing pnpm monorepo, importing types from `@godin-engine/contract`, with strict TS, path aliases, a **regenerated shared lockfile**, a **decided contract-build seam**, a **canonical provider-nesting skeleton**, and a green local `dev`/`typecheck`.
+**Goal:** A booting `@pokta-engine/web` Vite SPA inside the existing pnpm monorepo, importing types from `@pokta-engine/contract`, with strict TS, path aliases, a **regenerated shared lockfile**, a **decided contract-build seam**, a **canonical provider-nesting skeleton**, and a green local `dev`/`typecheck`.
 
 ### P0 sub-decisions (resolve BEFORE writing files — prerequisites for P0's own DoD)
 
-1. **Contract-consumption / build seam (CRITICAL — was a hidden blocker).** The repo is `noEmit:true` everywhere; `@godin-engine/contract` builds with `tsc --noEmit` and has no `composite`/declarations. Therefore `tsc -b` (project-references build mode) **cannot reference contract** and would break on the first build. **Decision (locked): use `tsc --noEmit` + Vite transpile**, with Vite Bundler resolution importing contract from its `./src` (`workspace:*`). This matches every other package in the repo. `web/package.json` `build` = `tsc --noEmit && vite build` (already reflected in §0). Do not introduce composite anywhere.
+1. **Contract-consumption / build seam (CRITICAL — was a hidden blocker).** The repo is `noEmit:true` everywhere; `@pokta-engine/contract` builds with `tsc --noEmit` and has no `composite`/declarations. Therefore `tsc -b` (project-references build mode) **cannot reference contract** and would break on the first build. **Decision (locked): use `tsc --noEmit` + Vite transpile**, with Vite Bundler resolution importing contract from its `./src` (`workspace:*`). This matches every other package in the repo. `web/package.json` `build` = `tsc --noEmit && vite build` (already reflected in §0). Do not introduce composite anywhere.
 
 2. **Canonical provider-nesting skeleton (resolves the main.tsx concurrent-edit hazard).** P0 defines the FINAL nesting order with all four providers stubbed so later lanes only fill bodies, never restructure the tree. **Order (locked, driven by token-injection requirement — Privy must wrap Query so `apiFetch` can read the access token):**
    ```
@@ -161,7 +161,7 @@ This is the chain to staff first and protect. The two non-obvious additions to t
 - `web/src/lib/utils.ts` — `cn()` (clsx + tailwind-merge).
 - `web/src/lib/api.ts` — `apiFetch<T>()` stub (retry/backoff/timeout shape from godinez-studio; token injection deferred to P6; **no X-Service-Key in browser** — see auth model in P5a/P6).
 - `web/src/providers/QueryProvider.tsx` — `QueryClient` (`staleTime: 30_000`, `retry: 1`, `MutationCache.onError → toast.error`).
-- `.github/workflows/ci.yml` — **EXTEND the existing job** (do not add a second pnpm pin): add `pnpm --filter @godin-engine/web typecheck`. Frozen-lockfile install depends on the regenerated lockfile from P0-A's first task.
+- `.github/workflows/ci.yml` — **EXTEND the existing job** (do not add a second pnpm pin): add `pnpm --filter @pokta-engine/web typecheck`. Frozen-lockfile install depends on the regenerated lockfile from P0-A's first task.
 
 ### Parallel lanes
 - **Lane P0-A (scaffold):** everything above, lockfile-first.
@@ -175,8 +175,8 @@ This is the chain to staff first and protect. The two non-obvious additions to t
 P0-A (lockfile-first) ‖ P0-B ‖ P0-C run concurrently. P0-A scaffold + P0-B's two critical response types must finish before P1 fixtures. P0-C output must finish before P5a-AUTH starts.
 
 ### Definition of Done
-- `pnpm --filter @godin-engine/web dev` serves a blank routed shell at `:5173`; `typecheck` passes via `tsc --noEmit`.
-- `web` resolves `import type { RunStatus } from "@godin-engine/contract"` via Bundler resolution (no `tsc -b`).
+- `pnpm --filter @pokta-engine/web dev` serves a blank routed shell at `:5173`; `typecheck` passes via `tsc --noEmit`.
+- `web` resolves `import type { RunStatus } from "@pokta-engine/contract"` via Bundler resolution (no `tsc -b`).
 - Regenerated `pnpm-lock.yaml` committed; `pnpm install --frozen-lockfile` passes; no React peer conflict.
 - `AppProviders.tsx` in canonical nesting order committed (the contract for P6/P7).
 - `docs/feature-requests/customer-dashboard/contract-gaps.md` committed; `ApprovalView` + `RunListItem`/`RunDetail` types committed to `packages/contract/src`.
@@ -460,20 +460,20 @@ Toggle flips EN↔ES-MX with persistence; MXN for Mi Pase, USD for Vino; dates/n
 
 ## P8 — Deploy + CI on Railway
 
-**Goal:** `@godin-engine/web` as its own Railway service, built via Dockerfile (Tailwind v4 native-binary safety), CI green.
+**Goal:** `@pokta-engine/web` as its own Railway service, built via Dockerfile (Tailwind v4 native-binary safety), CI green.
 
 ### Tasks
-- `web/Dockerfile` — **pokta-care two-stage Dockerfile** (NOT Nixpacks): `node:22-slim` build stage, `corepack enable` pinning **pnpm 10.26.1** (root-authoritative — NOT 9.15.0), copy whole workspace, `pnpm install --no-frozen-lockfile`, accept `ARG VITE_API_URL / VITE_PRIVY_APP_ID / VITE_SENTRY_DSN`, run `pnpm --filter @godin-engine/web build` (= `tsc --noEmit && vite build` — works because the contract-seam decision in P0 made the repo build with this command); runtime stage `serve -s dist -l ${PORT:-8080}`. **No `preDeployCommand`** (static build — do NOT copy the api service's `db:migrate` preDeploy).
+- `web/Dockerfile` — **pokta-care two-stage Dockerfile** (NOT Nixpacks): `node:22-slim` build stage, `corepack enable` pinning **pnpm 10.26.1** (root-authoritative — NOT 9.15.0), copy whole workspace, `pnpm install --no-frozen-lockfile`, accept `ARG VITE_API_URL / VITE_PRIVY_APP_ID / VITE_SENTRY_DSN`, run `pnpm --filter @pokta-engine/web build` (= `tsc --noEmit && vite build` — works because the contract-seam decision in P0 made the repo build with this command); runtime stage `serve -s dist -l ${PORT:-8080}`. **No `preDeployCommand`** (static build — do NOT copy the api service's `db:migrate` preDeploy).
 - `web/railway.json` — `builder: DOCKERFILE`, `dockerfilePath: web/Dockerfile`; `watchPatterns: ["web/**","packages/**",".npmrc","package.json","pnpm-lock.yaml"]`; `restartPolicyType: ON_FAILURE`, `maxRetries: 3`.
   > engine-api/worker use NIXPACKS; the SPA deliberately uses Dockerfile. Per repo memory: **one worker only, explicit Watch Paths per service** — set web's watch paths so api/worker redeploys don't rebuild the SPA and vice-versa.
 - **Service-creation sequencing (resolves chicken-and-egg):** confirm the Railway project supports a **3rd service**; document who creates it (CLI vs dashboard). **engine-api must have a stable PUBLIC domain BEFORE baking `VITE_API_URL`** (build-time ARG). Note: changing `VITE_API_URL` requires a **rebuild, not a restart** (ties to the "env read-once" repo memory).
 - Railway service env (build-time ARGs + runtime): `VITE_API_URL`, `VITE_PRIVY_APP_ID`, `VITE_SENTRY_DSN`, `PORT`.
 - `web/src/lib/sentry.ts` — `initSentry()` called from `web/src/main.tsx` (single line; `main.tsx` ownership stays with P0-A — Sentry init is the one allowed addition, landed as a reviewed diff).
-- `.github/workflows/ci.yml` — **extend the existing job**: add `pnpm --filter @godin-engine/web build` + `typecheck`. No second pnpm pin; Node 22 already set.
+- `.github/workflows/ci.yml` — **extend the existing job**: add `pnpm --filter @pokta-engine/web build` + `typecheck`. No second pnpm pin; Node 22 already set.
 - `web/.env.example`.
 
 ### Parallel lanes
-- **Lane P8-A (Dockerfile + railway.json + service creation):** Dockerfile/railway.json can be drafted during P0/P1, but **local validation of `pnpm --filter @godin-engine/web build` gates on the P0 contract-seam decision** (it must succeed locally with the exact command before the Dockerfile is meaningful). End-to-end deploy validation gates on P5 (live data) + P6 (auth) + engine-api public domain.
+- **Lane P8-A (Dockerfile + railway.json + service creation):** Dockerfile/railway.json can be drafted during P0/P1, but **local validation of `pnpm --filter @pokta-engine/web build` gates on the P0 contract-seam decision** (it must succeed locally with the exact command before the Dockerfile is meaningful). End-to-end deploy validation gates on P5 (live data) + P6 (auth) + engine-api public domain.
 - **Lane P8-B (CI lane + Sentry):** parallel.
 
 ### Serialization

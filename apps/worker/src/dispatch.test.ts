@@ -1,4 +1,4 @@
-import type { RunContext, WorkflowManifest } from '@godin-engine/contract'
+import type { RunContext, WorkflowManifest } from '@pokta-engine/contract'
 import { describe, expect, it, vi } from 'vitest'
 import { type DispatchEffects, dispatchOnSuccess } from './dispatch'
 

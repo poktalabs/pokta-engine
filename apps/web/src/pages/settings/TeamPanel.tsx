@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { AlertTriangle, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react'
-import type { InviteView, MemberRole } from '@godin-engine/contract'
+import type { InviteView, MemberRole } from '@pokta-engine/contract'
 import { useTenantContext } from '@/providers/TenantProvider'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'

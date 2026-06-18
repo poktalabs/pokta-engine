@@ -1,7 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import { db as defaultDb, schema } from '@godin-engine/db'
-import { listManifests } from '@godin-engine/workflows'
-import { listIntegrations } from '@godin-engine/integrations'
+import { db as defaultDb, schema } from '@pokta-engine/db'
+import { listManifests } from '@pokta-engine/workflows'
+import { listIntegrations } from '@pokta-engine/integrations'
 import { addTenantMember, MemberDidCollisionError } from './tenants'
 
 /**

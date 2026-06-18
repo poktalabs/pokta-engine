@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { RunContext } from '@godin-engine/contract'
-import type { ShopifyClient } from '@godin-engine/integrations'
+import type { RunContext } from '@pokta-engine/contract'
+import type { ShopifyClient } from '@pokta-engine/integrations'
 
 import { run, runFlagged, isWithinAntiThrash, selectSkus } from './index'
 import type {

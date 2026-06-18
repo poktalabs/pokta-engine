@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 
 /**
  * Mi Pase daily pricing — APPLY step (agent runtime, M1 plan T8).

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 
 /**
  * The committed action (run 2). Only reachable via an approved gate — the control

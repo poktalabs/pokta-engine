@@ -1,4 +1,4 @@
-# @godin-engine/web
+# @pokta-engine/web
 
 The customer-delivery workspace SPA for godin-engine (M2). A tenant-agnostic,
 governed agent-workflow console whose universal heart is the **Approvals queue**,
@@ -6,7 +6,7 @@ delivered single-tenant for **Mi Pase** but architected for **Vino Design Build*
 as tenant #2.
 
 - React 19 · Vite 6 · TypeScript (strict) · Tailwind v4 · TanStack Query v5 · React Router v7
-- Shared API types come from `@godin-engine/contract` (`workspace:*`, Bundler resolution — no `tsc -b`).
+- Shared API types come from `@pokta-engine/contract` (`workspace:*`, Bundler resolution — no `tsc -b`).
 - **Mock-data-first:** with `VITE_USE_MOCKS=true` the app serves from an in-process
   mock registry and never touches the network.
 
@@ -15,7 +15,7 @@ as tenant #2.
 From the **repo root** (this is a pnpm workspace; run with `--filter`):
 
 ```bash
-pnpm --filter @godin-engine/web dev
+pnpm --filter @pokta-engine/web dev
 ```
 
 Then open http://localhost:5173 — it redirects to `/mipase/approvals`.
@@ -27,9 +27,9 @@ the Vite dev proxy forwards `/v1` → `http://localhost:8787` (local engine-api)
 ### Other scripts
 
 ```bash
-pnpm --filter @godin-engine/web typecheck   # tsc --noEmit (strict)
-pnpm --filter @godin-engine/web build       # tsc --noEmit && vite build
-pnpm --filter @godin-engine/web preview      # serve the production build locally
+pnpm --filter @pokta-engine/web typecheck   # tsc --noEmit (strict)
+pnpm --filter @pokta-engine/web build       # tsc --noEmit && vite build
+pnpm --filter @pokta-engine/web preview      # serve the production build locally
 ```
 
 ## Environment

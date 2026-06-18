@@ -63,7 +63,7 @@ pnpm test        # 10 tests pass (resend: 6, send-step: 2, notion: 2)
 - `packages/resend/src/index.test.ts` mocks the `resend` SDK: success returns
   `{ messageId }`; `RESEND_TO` overrides the recipient; an `{ error }` response
   and a missing id both throw; unconfigured throws before calling the SDK.
-- `workflows/src/send-step/index.test.ts` mocks `@godin-engine/resend`: ok path ->
+- `workflows/src/send-step/index.test.ts` mocks `@pokta-engine/resend`: ok path ->
   `sendResult.status === 'ok'` with the `messageId`; throw path -> `status === 'failed'`
   with the error and the run **resolves** (no throw).
 

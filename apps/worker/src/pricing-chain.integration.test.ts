@@ -30,7 +30,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 import type {
   Catalog,
   ShopifyClient,
@@ -38,10 +38,10 @@ import type {
   VariantPriceUpdate,
   MercadoLibreClient,
   MLSearchResult,
-} from '@godin-engine/integrations'
+} from '@pokta-engine/integrations'
 
 import { dispatchOnSuccess, type DispatchEffects } from './dispatch'
-import { makeIntegrationResolver, registerProvider, unregisterProvider } from '@godin-engine/integrations'
+import { makeIntegrationResolver, registerProvider, unregisterProvider } from '@pokta-engine/integrations'
 
 // The dev container the services share (see docker-compose.yml / .env.example).
 const DEFAULT_DEV_DB = 'postgresql://postgres:postgres@localhost:5434/godin_engine'
@@ -165,23 +165,23 @@ let shopifyClient: ShopifyClient
 
 // ── Live DB harness (mirrors worker handle() + engine-api approve, sans pg-boss)
 
-let db: typeof import('@godin-engine/db')['db']
-let schema: typeof import('@godin-engine/db')['schema']
-let sql: typeof import('@godin-engine/db')['sql']
-let registry: typeof import('@godin-engine/workflows')
+let db: typeof import('@pokta-engine/db')['db']
+let schema: typeof import('@pokta-engine/db')['schema']
+let sql: typeof import('@pokta-engine/db')['sql']
+let registry: typeof import('@pokta-engine/workflows')
 let drizzle: typeof import('drizzle-orm')
 let pgUp = false
 
 /** Ping the dev PG; gate the suite on it being reachable. */
 async function probePg(): Promise<boolean> {
   try {
-    const mod = await import('@godin-engine/db')
+    const mod = await import('@pokta-engine/db')
     await mod.sql`select 1`
     db = mod.db
     schema = mod.schema
     sql = mod.sql
     drizzle = await import('drizzle-orm')
-    registry = await import('@godin-engine/workflows')
+    registry = await import('@pokta-engine/workflows')
     return true
   } catch (e) {
     console.warn(`[pricing-chain.integration] skipping — dev Postgres not reachable: ${(e as Error).message}`)

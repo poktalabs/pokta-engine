@@ -9,7 +9,7 @@ import {
   renderWithProviders,
   setPrivyState,
 } from '@/test'
-import type { TenantView } from '@godin-engine/contract'
+import type { TenantView } from '@pokta-engine/contract'
 import { useTenantContext } from '@/providers/TenantProvider'
 import Settings from '@/pages/settings/index'
 import ReportsPage from '@/pages/reports/ReportsPage'

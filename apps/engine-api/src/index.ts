@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server'
-import { getBoss } from '@godin-engine/queue'
+import { getBoss } from '@pokta-engine/queue'
 import { buildApp } from './app'
 
 // Entrypoint ONLY. buildApp() has no import-time side effects; the queue + HTTP

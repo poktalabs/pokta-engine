@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
-import { db as defaultDb, schema } from '@godin-engine/db'
-import { listManifests } from '@godin-engine/workflows'
-import type { TenantView, TenantStatus, MemberRole } from '@godin-engine/contract'
+import { db as defaultDb, schema } from '@pokta-engine/db'
+import { listManifests } from '@pokta-engine/workflows'
+import type { TenantView, TenantStatus, MemberRole } from '@pokta-engine/contract'
 
 /**
  * The tenant REGISTRY accessor (PR2) — the single read path for `engine_tenants`,
@@ -270,7 +270,7 @@ export function allowedWorkflowsFor(row: Pick<TenantRow, 'allowedWorkflows'>): s
 
 /**
  * toTenantView(row, allowedWorkflowsFiltered) — project a registry row into the
- * shared `TenantView` (`@godin-engine/contract`). `branding` is coerced to the
+ * shared `TenantView` (`@pokta-engine/contract`). `branding` is coerced to the
  * typed `{ name; badge? }` shape; `allowedWorkflows` is the caller-supplied,
  * already-filtered set (defaults to `allowedWorkflowsFor(row)`). Integrations are
  * NO LONGER part of this view (D-Codex#4 / P5b) — a tenant's per-integration

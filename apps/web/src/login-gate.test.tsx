@@ -9,7 +9,7 @@ import {
   renderWithProviders,
   setPrivyState,
 } from '@/test'
-import type { TenantView } from '@godin-engine/contract'
+import type { TenantView } from '@pokta-engine/contract'
 
 /**
  * LOGIN-GATE + TOKEN (PR2b §6, login-gate.test.tsx). Two security-critical claims:

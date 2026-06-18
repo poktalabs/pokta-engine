@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { MemberRole, TenantView } from '@godin-engine/contract'
+import type { MemberRole, TenantView } from '@pokta-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
 
 /**

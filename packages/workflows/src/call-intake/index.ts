@@ -1,5 +1,5 @@
-import type { RunContext } from '@godin-engine/contract'
-import { completeJSON } from '@godin-engine/llm'
+import type { RunContext } from '@pokta-engine/contract'
+import { completeJSON } from '@pokta-engine/llm'
 import { pickScenario } from '../demo-scenarios'
 
 export interface Extraction {

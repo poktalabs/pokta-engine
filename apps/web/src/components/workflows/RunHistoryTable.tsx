@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import type { RunStatus } from '@godin-engine/contract'
+import type { RunStatus } from '@pokta-engine/contract'
 import { cn } from '@/lib/utils'
 import { Pill, type PillStatus } from '@/components/ui/pill'
 import { EmptyState } from '@/components/ui/EmptyState'

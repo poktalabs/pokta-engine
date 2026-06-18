@@ -14,9 +14,9 @@ Both Codex and the Step-0 instinct flagged that mixing DB schema + worker config
 
 1. **Tenant id canonical = `mi-pase`** (the engine's system-of-record id; in `engine_runs.consumer_id` + SERVICE_KEYS). `engine_tenants.tenant_id == consumer_id`. (SPA route rename `mipase→mi-pase` is a PR2b task.)
 2. **Shared tenant-registry module, ~60s in-process TTL cache**, used by BOTH engine-api and worker (each process caches independently). Cache miss reads one indexed row.
-3. **Workflow allow-list enforced in engine-api** (keep `@godin-engine/workflows` pure): one helper filters `listManifests()` and gates `POST /v1/workflows/:id/runs` → `SKILL_NOT_FOUND` when not in `tenant.allowed_workflows` (text[]).
+3. **Workflow allow-list enforced in engine-api** (keep `@pokta-engine/workflows` pure): one helper filters `listManifests()` and gates `POST /v1/workflows/:id/runs` → `SKILL_NOT_FOUND` when not in `tenant.allowed_workflows` (text[]).
 4. *(PR2b)* Full Privy P6 in the SPA.
-5. **Shared `TenantView` type in `@godin-engine/contract`** = the `GET /v1/tenants/me` response. Engine maps row → TenantView; SPA imports it (PR2b). Includes **typed branding** (not raw jsonb) and the **allow-list-filtered `allowedWorkflows`** so the SPA never calls a forbidden workflow.
+5. **Shared `TenantView` type in `@pokta-engine/contract`** = the `GET /v1/tenants/me` response. Engine maps row → TenantView; SPA imports it (PR2b). Includes **typed branding** (not raw jsonb) and the **allow-list-filtered `allowedWorkflows`** so the SPA never calls a forbidden workflow.
 6. *(PR2b)* SPA tests via vitest+jsdom.
 - **Membership (cross-model #1): `members text[]` of allowed Privy DIDs on the tenant row.** `resolveTenant` for a Privy principal = find the tenant whose `members[]` contains the DID (none → `TENANT_UNKNOWN`; multiple → reject explicitly as ambiguous for now). Logic ships + is tested in PR2 (Privy-mode principal); real Privy tokens come from PR2b.
 

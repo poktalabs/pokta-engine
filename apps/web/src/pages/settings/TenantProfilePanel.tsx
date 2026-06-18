@@ -1,4 +1,4 @@
-import type { TenantView } from '@godin-engine/contract'
+import type { TenantView } from '@pokta-engine/contract'
 import { HairlineGrid, HairlineCell } from '@/components/ui/HairlineGrid'
 
 /**

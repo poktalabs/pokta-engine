@@ -1,4 +1,4 @@
-import type { ErrorEnvelope, RunDetail } from '@godin-engine/contract'
+import type { ErrorEnvelope, RunDetail } from '@pokta-engine/contract'
 
 /**
  * Run-detail fixtures (M2 P3-B — the RUN DETAIL surface).

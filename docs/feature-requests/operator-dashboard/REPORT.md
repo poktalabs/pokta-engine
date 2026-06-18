@@ -81,7 +81,7 @@ keeps the assembly hermetically testable and keeps the read-only DB queries triv
 (`engine-api/src/dashboard.test.ts` adds 7: assembler shape, run-view mapping, derived graph
 ordering + integration labels + chains, outcome registry incl. the D3 succeeded-run/
 failed-outcome case, mid-flight no-output safety, and the mocked-db `/dashboard/api/overview`
-+ `/dashboard` HTML routes). The db layer is mocked (`vi.mock('@godin-engine/db')`) so the
++ `/dashboard` HTML routes). The db layer is mocked (`vi.mock('@pokta-engine/db')`) so the
 test never touches Postgres.
 
 ## Follow-ups / uncertainties

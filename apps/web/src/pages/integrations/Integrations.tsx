@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Plug } from 'lucide-react'
-import type { ErrorEnvelope, IntegrationListResponse } from '@godin-engine/contract'
+import type { ErrorEnvelope, IntegrationListResponse } from '@pokta-engine/contract'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useTenant } from '@/providers/TenantProvider'
 import { LoadingState } from '@/components/ui/LoadingState'

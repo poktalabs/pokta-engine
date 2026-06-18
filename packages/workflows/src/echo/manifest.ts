@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 
 /** Quota-gated echo (spike steps 7-9). Stands in for the landing-page job. */
 const manifest: WorkflowManifest<{ message: string }> = {

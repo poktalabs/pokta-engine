@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  *      index (`tenant_members_did_unique`) is present. This guards the structural
  *      promise that no existing/env-seeded prod member is lost on migrate.
  *
- * Hermetic: `@godin-engine/db` throws without DATABASE_URL on import, so it is
+ * Hermetic: `@pokta-engine/db` throws without DATABASE_URL on import, so it is
  * MOCKED (canonical engine-api pattern). The drizzle table markers tell the mock
  * which table a write targets; member binds use onConflictDoNothing (insert-only).
  * The workflows package stays REAL so validateSeeds' allow-list cross-check runs
@@ -34,7 +34,7 @@ const writes: {
   memberBinds: Array<{ tenantId: string; did: string; source: unknown; onConflict: string }>
 } = { upserts: [], conflicts: [], memberBinds: [] }
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // db.insert(<table>) routes by the schema mock's __table tag. The engine_tenant_members
   // mock records WHICH conflict strategy was used so we can prove inserts are
   // insert-only (onConflictDoNothing) and never an upsert that could overwrite/wipe.

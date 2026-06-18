@@ -20,9 +20,9 @@ disjoint tests, then an adversarial isolation panel, then the PR. Fail closed; n
 
 - **Repo (cd here for every command):** `/Users/mel/workspaces/poktalabs/projects/godinez-ai/godin-engine/code/godin-engine-v0.1`
 - **Branch:** create `feat/m2-tenancy-runtime` off `origin/main` (currently `5777593`). Do NOT base on any SPA branch.
-- **Stack:** pnpm 10.26.1, Node 22, strict TS, Hono, drizzle-orm, **turbo** (build/typecheck), root **vitest** (tests). Monorepo: `apps/{engine-api,worker,web}`, `packages/{contract,db,queue,llm,workflows}`, `integrations/` (`@godin-engine/integrations`).
+- **Stack:** pnpm 10.26.1, Node 22, strict TS, Hono, drizzle-orm, **turbo** (build/typecheck), root **vitest** (tests). Monorepo: `apps/{engine-api,worker,web}`, `packages/{contract,db,queue,llm,workflows}`, `integrations/` (`@pokta-engine/integrations`).
 - **Commit identity (every commit):** `git -c user.name="troopdegen" -c user.email="mel@innvertir.com"`. Co-author trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
-- **Verify commands:** `pnpm typecheck` (turbo) · `pnpm test` (vitest, root) · `pnpm check:scoped` (tenant-isolation grep gate) · `pnpm build` (turbo) · `pnpm --filter @godin-engine/db db:generate` (drizzle migration from schema).
+- **Verify commands:** `pnpm typecheck` (turbo) · `pnpm test` (vitest, root) · `pnpm check:scoped` (tenant-isolation grep gate) · `pnpm build` (turbo) · `pnpm --filter @pokta-engine/db db:generate` (drizzle migration from schema).
 - **GREEN BAR:** baseline is **331 tests / 38 files** passing; the worker `pricing-chain.integration.test.ts` SKIPS without a dev Postgres (that skip is expected/green). PR2 must keep all 331 green and ADD tests; never drop the count. `main` is branch-protected (requires the `test` check) — land via squash-merge PR.
 
 ## 2. What already exists (REUSE — do not rebuild)
@@ -32,19 +32,19 @@ disjoint tests, then an adversarial isolation panel, then the PR. Fail closed; n
 - **`apps/engine-api/src/app.ts`** — `buildApp()`. Dispatch route `POST /v1/workflows/:id/runs` (~line 79) already: gets `consumer` from ctx, calls `resolveTenant` (~:81) → `TENANT_UNKNOWN` if not ok, then `getWorkflow(id)`, `gatedTargets` check, body.consumer_id mismatch guard, `forConsumer(db, consumer.id).dispatchRun(...)`. **T6 allow-list gate slots in right after `getWorkflow`.** Also where `GET /v1/tenants/me` is added. `knownServiceConsumers()` from `./auth` gives SERVICE_KEYS consumer ids.
 - **`packages/contract/src/`** — `EngineError` with codes incl. `TENANT_UNKNOWN`(403), `SKILL_NOT_FOUND`(404), `UNAUTHENTICATED`(401), `ARGS_INVALID`(400). `index.ts` re-exports. **T2 adds `TenantView` here.**
 - **`packages/db/src/schema.ts`** — drizzle schema (`engineRuns` has `consumerId`; `engineApprovals` has NO consumer_id — scoped via sourceRunId; `engineQuotaLedger`, `engineWorkflowState`). Uses `pgTable`, `pgEnum`, `text`, `jsonb`, `timestamp`, `index`, etc. **T1 adds `engineTenants`.**
-- **`packages/db/`** migrations: `drizzle/` dir, 2 existing (`0000_*`, `0001_*`). `pnpm --filter @godin-engine/db db:generate` produces the next SQL from the schema. Railway runs `db:migrate` as engine-api `preDeployCommand`.
+- **`packages/db/`** migrations: `drizzle/` dir, 2 existing (`0000_*`, `0001_*`). `pnpm --filter @pokta-engine/db db:generate` produces the next SQL from the schema. Railway runs `db:migrate` as engine-api `preDeployCommand`.
 - **`packages/workflows/src/index.ts`** — PURE registry: `getWorkflow(id)`, `listManifests()`, `gatedTargets()`. NO DB/tenant knowledge. **Keep it pure — do NOT make it consumer-aware.** Filter in engine-api.
-- **`integrations/` (`@godin-engine/integrations`)** — `getIntegration`/`listIntegrations` (each integration has a descriptor: id, displayName, category, secretKeys). TenantView's `integrations` list is validated/enriched against `listIntegrations()`.
+- **`integrations/` (`@pokta-engine/integrations`)** — `getIntegration`/`listIntegrations` (each integration has a descriptor: id, displayName, category, secretKeys). TenantView's `integrations` list is validated/enriched against `listIntegrations()`.
 - **`apps/worker/src/provider-config.ts`** — per-tenant env wiring. Has `ENV_PREFIX: Record<string,string> = {'mi-pase':'MIPASE'}`. Reads `MIPASE_SHOPIFY_*` / `MIPASE_ML_*`. Registers shopify+ML factories. **T7 replaces the hardcoded `ENV_PREFIX[consumerId]` lookup with `tenant.secret_prefix` from the registry.**
 - **`scripts/check-scoped-db.sh`** (`pnpm check:scoped`) — CI grep gate forbidding raw `engine_*` selects in the /v1 surface outside `scoped-db.ts`. Extend its allowlist if the new tenant-registry module does raw tenant-table reads (engine_tenants is NOT an engine_runs-class table, but keep the gate honest).
-- Test convention: `apps/engine-api/src/<name>.test.ts`, mock `@godin-engine/db` (+ `@godin-engine/queue`) — see `apps/engine-api/src/{auth,isolation,scoped-db,m1-regression}.test.ts` for the canonical mocking pattern (db client throws without DATABASE_URL on import, so always mock it).
+- Test convention: `apps/engine-api/src/<name>.test.ts`, mock `@pokta-engine/db` (+ `@pokta-engine/queue`) — see `apps/engine-api/src/{auth,isolation,scoped-db,m1-regression}.test.ts` for the canonical mocking pattern (db client throws without DATABASE_URL on import, so always mock it).
 
 ## 3. Locked decisions (from eng review + Codex outside voice)
 
 1. **Canonical tenant id = `mi-pase`** (hyphen). `engine_tenants.tenant_id == consumer_id`. (SPA `mipase→mi-pase` rename is PR2b, not here.)
 2. **Shared tenant-registry module with ~60s in-process TTL cache**, used by engine-api AND worker (each process caches independently). Cache miss = one indexed row read.
 3. **Workflow allow-list enforced in engine-api** (registry stays pure): one helper filters `listManifests()` + gates dispatch POST → `SKILL_NOT_FOUND` when not in `tenant.allowed_workflows`.
-5. **Shared `TenantView` in `@godin-engine/contract`** = the `GET /v1/tenants/me` response: typed `branding` (not raw jsonb) + the **allow-list-filtered** `allowedWorkflows` + `integrations`.
+5. **Shared `TenantView` in `@pokta-engine/contract`** = the `GET /v1/tenants/me` response: typed `branding` (not raw jsonb) + the **allow-list-filtered** `allowedWorkflows` + `integrations`.
 - **Membership = `members text[]` of allowed Privy DIDs on the tenant row.** `resolveTenant` for a Privy principal (`mode==='privy'`) finds the tenant whose `members[]` contains `consumer.identity` (the DID): none → `TENANT_UNKNOWN`; multiple → reject as ambiguous (`TENANT_UNKNOWN`). Service principal (`mode==='service'`): `consumer.id` is the tenant id directly. Both paths then check the tenant exists + `status==='active'`.
 - **Anti-enumeration:** disallowed/cross-tenant workflow → `SKILL_NOT_FOUND` (matches PR1's 404 posture). Document in code.
 
@@ -74,7 +74,7 @@ export const engineTenants = pgTable('engine_tenants', {
 
 ## 5. Tasks (acceptance criteria per task)
 
-- **T1 db schema + migration** — add `engineTenants` + `tenantStatus` enum to `packages/db/src/schema.ts`; run `pnpm --filter @godin-engine/db db:generate` to emit `drizzle/0002_*.sql`. ✅ migration generated + applies; schema typechecks.
+- **T1 db schema + migration** — add `engineTenants` + `tenantStatus` enum to `packages/db/src/schema.ts`; run `pnpm --filter @pokta-engine/db db:generate` to emit `drizzle/0002_*.sql`. ✅ migration generated + applies; schema typechecks.
 - **T2 contract `TenantView`** — `packages/contract/src/` (new file + export from `index.ts`): `{ id, name, status, currency, locale, branding: {name: string; badge?: string}, allowedWorkflows: string[], integrations: string[] }`. ✅ typecheck.
 - **T3 tenant-registry module** — new `apps/engine-api/src/tenants.ts` (importable by the worker too, OR a shared accessor): `getTenant(id): Promise<TenantRow | undefined>` with a ~60s TTL cache; `findTenantByMember(did)`; `toTenantView(row, allowedWorkflowsFiltered)`. Status-aware helpers. ✅ cache hit/miss/expiry + membership lookup unit-tested.
 - **T4 resolveTenant swap** — `apps/engine-api/src/scoped-db.ts`: registry-backed. service mode → `getTenant(consumer.id)`; privy mode → `findTenantByMember(consumer.identity)`; reject empty/unknown/non-active → not-ok (`TENANT_UNKNOWN`). Keep the existing call sites working. ✅ RESOLVE tests.

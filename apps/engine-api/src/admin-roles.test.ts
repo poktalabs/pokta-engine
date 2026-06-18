@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * ANTI-ENUM ★: every authz failure (member, cross-tenant admin, non-superadmin) is the
  * SAME APPROVAL_DENIED 403 — no tenant-existence/role leak.
  *
- * Hermetic: @godin-engine/db is a TINY in-memory store of engine_tenants /
+ * Hermetic: @pokta-engine/db is a TINY in-memory store of engine_tenants /
  * engine_tenant_members (role) / engine_tenant_invites (role) / engine_superadmins.
  * drizzle-orm is mocked structurally. Privy auth uses an injected offline verifier.
  */
@@ -84,7 +84,7 @@ class ActiveEmailUnique extends Error {
   }
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -101,7 +101,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const eqVal = (m: unknown, col: string): string | undefined => {
     const w = m as { eq?: [unknown, unknown] }
     return w?.eq && w.eq[0] === col ? (w.eq[1] as string) : undefined

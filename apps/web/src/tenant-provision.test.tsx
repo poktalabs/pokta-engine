@@ -8,7 +8,7 @@ import {
   setPrivyState,
 } from '@/test'
 import { useTenantContext } from '@/providers/TenantProvider'
-import type { ErrorEnvelope, TenantView } from '@godin-engine/contract'
+import type { ErrorEnvelope, TenantView } from '@pokta-engine/contract'
 
 /**
  * TENANT-PROVISION ★ (tenant-invites Wave 2, plan §5/§6) — TenantProvider's

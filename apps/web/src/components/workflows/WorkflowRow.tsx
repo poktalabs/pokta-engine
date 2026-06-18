@@ -7,7 +7,7 @@ import {
   type LucideProps,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
-import type { WorkflowCard } from '@godin-engine/contract'
+import type { WorkflowCard } from '@pokta-engine/contract'
 import { cn } from '@/lib/utils'
 import { Pill, type PillStatus } from '@/components/ui/pill'
 

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { ApprovalView, ErrorEnvelope } from '@godin-engine/contract'
+import type { ApprovalView, ErrorEnvelope } from '@pokta-engine/contract'
 
 /**
  * The Approvals renderer CONTRACT (M2 P2-A).

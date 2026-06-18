@@ -3,7 +3,7 @@ import type { User } from '@privy-io/server-auth'
 
 /**
  * Wave 1 — invite SEED + Privy verified-email SEAM, three concerns in one hermetic
- * file (model: app.test.ts mocks @godin-engine/db; privy-user.test.ts builds a fake
+ * file (model: app.test.ts mocks @pokta-engine/db; privy-user.test.ts builds a fake
  * Privy User; invite-seed.test.ts captures the insert strategy):
  *
  *   (1) parseInviteEmails / validateInviteEmails — pure helpers: lowercase, trim,
@@ -17,7 +17,7 @@ import type { User } from '@privy-io/server-auth'
  *       built around an INJECTED getUser fails CLOSED (`[]`) when getUser THROWS — no
  *       network is ever hit (the getUser seam is a stub).
  *
- * Hermetic: @godin-engine/db throws without DATABASE_URL on import, so it is MOCKED;
+ * Hermetic: @pokta-engine/db throws without DATABASE_URL on import, so it is MOCKED;
  * the mock records each engine_tenant_invites insert's conflict strategy. drizzle-orm
  * is mocked structurally. The Privy User is a hand-built fixture and getUser is a stub
  * — no @privy-io network call.
@@ -41,7 +41,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const insert = (table: { __table?: string } | undefined) => {
     if (table?.__table === 'engine_tenant_invites') {
       return {

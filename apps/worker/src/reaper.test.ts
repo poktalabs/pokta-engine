@@ -1,4 +1,4 @@
-import type { EngineError, RunContext } from '@godin-engine/contract'
+import type { EngineError, RunContext } from '@pokta-engine/contract'
 import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_GRACE_MS,

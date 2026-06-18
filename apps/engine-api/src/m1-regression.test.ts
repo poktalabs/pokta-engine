@@ -10,8 +10,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
  * runs, and read its own run by id — and that the dispatched run is bound to the
  * authenticated tenant (consumer_id taken from ctx, NEVER from the request body).
  *
- * Hermetic: @godin-engine/db and @godin-engine/queue are MOCKED so nothing
- * touches Postgres or pg-boss. We do NOT mock @godin-engine/workflows — the real
+ * Hermetic: @pokta-engine/db and @pokta-engine/queue are MOCKED so nothing
+ * touches Postgres or pg-boss. We do NOT mock @pokta-engine/workflows — the real
  * `pricing-draft` manifest validates the input, so this also guards that the
  * pricing input contract still admits the M1 shape.
  */
@@ -20,12 +20,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 type Row = Record<string, unknown>
 const state: { runs: Row[]; inserted: Row[] } = { runs: [], inserted: [] }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const chain = (rows: Row[]) => ({
     from: () => ({
       innerJoin: () => ({ where: () => ({ orderBy: () => ({ limit: async () => rows.map((r) => ({ approval: r })) }) }) }),
@@ -91,7 +91,7 @@ const { buildApp } = await import('./app')
 // so the T5 allow-list gate is a no-op for the M1 chain rather than a silent
 // blocker. If a future rename drifts the manifest ids away from the seeded
 // allow-list, this assertion fails loudly instead of the chain 404-ing.
-const { listManifests } = await import('@godin-engine/workflows')
+const { listManifests } = await import('@pokta-engine/workflows')
 
 const MIPASE_KEY = { 'X-Service-Key': 'svc-key-mipase' }
 

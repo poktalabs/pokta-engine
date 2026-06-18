@@ -8,7 +8,7 @@ import {
   Play,
   Sparkles,
 } from 'lucide-react'
-import type { ErrorEnvelope, RunListItem, RunStatus } from '@godin-engine/contract'
+import type { ErrorEnvelope, RunListItem, RunStatus } from '@pokta-engine/contract'
 import { useTenant } from '@/providers/TenantProvider'
 import { Button } from '@/components/ui/button'
 import { Pill, type PillStatus } from '@/components/ui/pill'

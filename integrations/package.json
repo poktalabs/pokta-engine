@@ -1,5 +1,5 @@
 {
-  "name": "@godin-engine/integrations",
+  "name": "@pokta-engine/integrations",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@godin-engine/contract": "workspace:*",
+    "@pokta-engine/contract": "workspace:*",
     "@notionhq/client": "^2.2.15",
     "resend": "^4.0.1"
   },

@@ -10,7 +10,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
  *       status='pending'); a re-seed adds no duplicate and NEVER updates/revokes an
  *       existing row; an unset env binds nothing (no wipe, no revoke).
  *
- * Hermetic: @godin-engine/db throws without DATABASE_URL on import, so it is MOCKED.
+ * Hermetic: @pokta-engine/db throws without DATABASE_URL on import, so it is MOCKED.
  * The mock records WHICH conflict strategy each engine_tenant_invites insert used so
  * we can prove it is insert-only (never an upsert that could overwrite/revoke).
  * drizzle-orm is mocked structurally. The workflows/integrations packages stay REAL
@@ -34,7 +34,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const insert = (table: { __table?: string } | undefined) => {
     if (table?.__table === 'engine_tenant_invites') {
       return {

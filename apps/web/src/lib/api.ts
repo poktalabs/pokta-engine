@@ -2,7 +2,7 @@ import {
   type ErrorCode,
   type ErrorEnvelope,
   errorEnvelopeSchema,
-} from '@godin-engine/contract'
+} from '@pokta-engine/contract'
 import { resolveMock } from '@/mocks/registry'
 // Side-effect import: registers every per-surface fixture (approvals, …) with
 // the registry. Tree-shaken out of the network build because the bundler drops

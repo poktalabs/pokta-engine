@@ -10,7 +10,7 @@ import {
   Radio,
   X,
 } from 'lucide-react'
-import type { ApprovalView } from '@godin-engine/contract'
+import type { ApprovalView } from '@pokta-engine/contract'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type {

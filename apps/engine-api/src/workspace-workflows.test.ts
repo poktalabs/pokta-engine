@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 /**
  * GET /v1/workspace/workflows (P5b) — workspace CARD composition + ISOLATION ★.
  *
- * Hermetic: we MOCK @godin-engine/db and @godin-engine/queue so nothing touches
+ * Hermetic: we MOCK @pokta-engine/db and @pokta-engine/queue so nothing touches
  * Postgres / pg-boss, and the `./tenants` registry seam so resolveTenant is
  * registry-backed without a DB (mirrors isolation.test.ts / scoped-db.test.ts).
  *
@@ -56,12 +56,12 @@ function stateFromPredicate(pred: unknown): string | undefined {
   return undefined
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // runs read: select().from(R).where(pred).orderBy().limit() — filtered by consumer.
   const runsChain = {
     from: () => ({

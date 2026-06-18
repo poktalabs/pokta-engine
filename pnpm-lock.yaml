@@ -29,24 +29,24 @@ importers:
 
   apps/engine-api:
     dependencies:
-      '@godin-engine/contract':
-        specifier: workspace:*
-        version: link:../../packages/contract
-      '@godin-engine/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@godin-engine/integrations':
-        specifier: workspace:*
-        version: link:../../integrations
-      '@godin-engine/queue':
-        specifier: workspace:*
-        version: link:../../packages/queue
-      '@godin-engine/workflows':
-        specifier: workspace:*
-        version: link:../../packages/workflows
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.23)
+      '@pokta-engine/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
+      '@pokta-engine/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@pokta-engine/integrations':
+        specifier: workspace:*
+        version: link:../../integrations
+      '@pokta-engine/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
+      '@pokta-engine/workflows':
+        specifier: workspace:*
+        version: link:../../packages/workflows
       '@privy-io/server-auth':
         specifier: ^1.32.5
         version: 1.32.5(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(viem@2.52.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76))
@@ -78,7 +78,7 @@ importers:
       '@fontsource-variable/source-serif-4':
         specifier: ^5.2.5
         version: 5.2.9
-      '@godin-engine/contract':
+      '@pokta-engine/contract':
         specifier: workspace:*
         version: link:../../packages/contract
       '@privy-io/react-auth':
@@ -173,19 +173,19 @@ importers:
 
   apps/worker:
     dependencies:
-      '@godin-engine/contract':
+      '@pokta-engine/contract':
         specifier: workspace:*
         version: link:../../packages/contract
-      '@godin-engine/db':
+      '@pokta-engine/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@godin-engine/integrations':
+      '@pokta-engine/integrations':
         specifier: workspace:*
         version: link:../../integrations
-      '@godin-engine/queue':
+      '@pokta-engine/queue':
         specifier: workspace:*
         version: link:../../packages/queue
-      '@godin-engine/workflows':
+      '@pokta-engine/workflows':
         specifier: workspace:*
         version: link:../../packages/workflows
       drizzle-orm:
@@ -201,12 +201,12 @@ importers:
 
   integrations:
     dependencies:
-      '@godin-engine/contract':
-        specifier: workspace:*
-        version: link:../packages/contract
       '@notionhq/client':
         specifier: ^2.2.15
         version: 2.3.0
+      '@pokta-engine/contract':
+        specifier: workspace:*
+        version: link:../packages/contract
       resend:
         specifier: ^4.0.1
         version: 4.8.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -263,16 +263,16 @@ importers:
 
   packages/workflows:
     dependencies:
-      '@godin-engine/contract':
+      '@pokta-engine/contract':
         specifier: workspace:*
         version: link:../contract
-      '@godin-engine/db':
+      '@pokta-engine/db':
         specifier: workspace:*
         version: link:../db
-      '@godin-engine/integrations':
+      '@pokta-engine/integrations':
         specifier: workspace:*
         version: link:../../integrations
-      '@godin-engine/llm':
+      '@pokta-engine/llm':
         specifier: workspace:*
         version: link:../llm
       drizzle-orm:

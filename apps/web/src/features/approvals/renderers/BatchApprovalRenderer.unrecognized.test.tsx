@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import type { ApprovalView } from '@godin-engine/contract'
+import type { ApprovalView } from '@pokta-engine/contract'
 import type { ApprovalRendererProps } from '../types'
 import { BatchApprovalRenderer } from './BatchApprovalRenderer'
 

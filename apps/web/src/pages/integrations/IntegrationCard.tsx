@@ -2,7 +2,7 @@ import { Plug } from 'lucide-react'
 import type {
   IntegrationConnectionStatus,
   IntegrationStatus,
-} from '@godin-engine/contract'
+} from '@pokta-engine/contract'
 import { Pill, type PillStatus } from '@/components/ui/pill'
 import { cn } from '@/lib/utils'
 

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 
 /**
  * Vino pipeline, step 1 (agent runtime): read a call transcript, extract

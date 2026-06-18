@@ -16,7 +16,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import type { ErrorEnvelope } from '@godin-engine/contract'
+import type { ErrorEnvelope } from '@pokta-engine/contract'
 import type { ReactNode } from 'react'
 
 /**

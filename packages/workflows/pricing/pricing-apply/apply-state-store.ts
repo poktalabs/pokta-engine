@@ -8,7 +8,7 @@
  * and AFTER each Shopify write (attempting → applied|failed|skipped).
  *
  * As with the draft store, `run()` stays testable without a live database: the
- * production store is built lazily via a dynamic import of `@godin-engine/db`,
+ * production store is built lazily via a dynamic import of `@pokta-engine/db`,
  * and tests inject a fake via `input.__applyStore`. Both share the logical
  * `'pricing'` workflow_id so apply reads exactly the rows the draft wrote.
  */
@@ -64,7 +64,7 @@ function num(v: string | number | null | undefined): number | null {
  * module can be imported in tests without `DATABASE_URL`.
  */
 export async function createDbApplyStateStore(): Promise<ApplyStateStore> {
-  const { db, schema } = await import('@godin-engine/db')
+  const { db, schema } = await import('@pokta-engine/db')
   const { and, eq, inArray } = await import('drizzle-orm')
 
   return {

@@ -10,7 +10,7 @@ import {
 } from '@/test'
 import { useTenantContext } from '@/providers/TenantProvider'
 import Integrations from './Integrations'
-import type { IntegrationStatus, TenantView } from '@godin-engine/contract'
+import type { IntegrationStatus, TenantView } from '@pokta-engine/contract'
 
 /**
  * INTEGRATIONS-LIVE ★ (P5b Wave 2). The Integrations surface is wired off the

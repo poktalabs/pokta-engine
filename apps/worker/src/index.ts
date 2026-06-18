@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
-import { EngineError, type RunContext } from '@godin-engine/contract'
-import { db, schema } from '@godin-engine/db'
-import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
-import { getWorkflow } from '@godin-engine/workflows'
+import { EngineError, type RunContext } from '@pokta-engine/contract'
+import { db, schema } from '@pokta-engine/db'
+import { getBoss, QUEUE, type RunJob } from '@pokta-engine/queue'
+import { getWorkflow } from '@pokta-engine/workflows'
 import { type DispatchEffects, dispatchOnSuccess } from './dispatch'
-import { makeIntegrationResolver } from '@godin-engine/integrations'
+import { makeIntegrationResolver } from '@pokta-engine/integrations'
 // Side-effect import (T9): registers the env-backed shopify + mercado-libre
 // provider factories with the resolver. The IntegrationClients declaration-merge
 // is owned by the integrations package (pulled in via provider-config's import).

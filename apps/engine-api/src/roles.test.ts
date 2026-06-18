@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *                              invites excluded; members already counted via rows).
  *   withTenantSeatLock       — runs fn (the advisory-lock execute is a no-op here).
  *
- * Hermetic: @godin-engine/db mocked; drizzle-orm mocked structurally so eq/and yield
+ * Hermetic: @pokta-engine/db mocked; drizzle-orm mocked structurally so eq/and yield
  * inspectable markers the mock reads to filter the in-memory stores.
  */
 
@@ -43,7 +43,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const eqVal = (m: unknown, col: string): string | undefined => {
     const w = m as { eq?: [unknown, unknown] }
     return w?.eq && w.eq[0] === col ? (w.eq[1] as string) : undefined
@@ -178,7 +178,7 @@ describe('seatCount', () => {
 
 describe('withTenantSeatLock', () => {
   it('runs fn (the advisory lock execute is a no-op in the mock tx)', async () => {
-    const tx = { execute: async () => [] } as unknown as typeof import('@godin-engine/db').db
+    const tx = { execute: async () => [] } as unknown as typeof import('@pokta-engine/db').db
     const out = await withTenantSeatLock('mi-pase', tx, async () => 'ran')
     expect(out).toBe('ran')
   })

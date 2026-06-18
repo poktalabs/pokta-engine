@@ -1,6 +1,6 @@
-import type { IntegrationResult, RunContext } from '@godin-engine/contract'
-import { completeJSON } from '@godin-engine/llm'
-import { commitCrmEntry } from '@godin-engine/integrations'
+import type { IntegrationResult, RunContext } from '@pokta-engine/contract'
+import { completeJSON } from '@pokta-engine/llm'
+import { commitCrmEntry } from '@pokta-engine/integrations'
 import type { CrmEntry, Extraction } from '../call-intake'
 import { pickScenario } from '../demo-scenarios'
 

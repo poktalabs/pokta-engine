@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeIntegrationResolver } from '@godin-engine/integrations'
+import { makeIntegrationResolver } from '@pokta-engine/integrations'
 
 /**
  * PR2 harden regression for the worker secret-prefix path (isolation-panel

@@ -42,9 +42,9 @@ if (!process.env.DATABASE_URL) process.env.DATABASE_URL = DEFAULT_DEV_DB
 // A unique tenant per run so we never collide with seeded data or a parallel run.
 const TENANT = `cap-race-${randomUUID().slice(0, 8)}`
 
-let db: typeof import('@godin-engine/db')['db']
-let schema: typeof import('@godin-engine/db')['schema']
-let sql: typeof import('@godin-engine/db')['sql']
+let db: typeof import('@pokta-engine/db')['db']
+let schema: typeof import('@pokta-engine/db')['schema']
+let sql: typeof import('@pokta-engine/db')['sql']
 let drizzle: typeof import('drizzle-orm')
 let roles: typeof import('./roles')
 let invites: typeof import('./invites')
@@ -52,7 +52,7 @@ let pgUp = false
 
 async function probePg(): Promise<boolean> {
   try {
-    const mod = await import('@godin-engine/db')
+    const mod = await import('@pokta-engine/db')
     await mod.sql`select 1`
     db = mod.db
     schema = mod.schema

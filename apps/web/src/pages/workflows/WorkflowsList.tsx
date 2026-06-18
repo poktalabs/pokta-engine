@@ -1,5 +1,5 @@
 import { Workflow } from 'lucide-react'
-import type { ErrorEnvelope } from '@godin-engine/contract'
+import type { ErrorEnvelope } from '@pokta-engine/contract'
 import { useTenant } from '@/providers/TenantProvider'
 import { HairlineGrid } from '@/components/ui/HairlineGrid'
 import { LoadingState } from '@/components/ui/LoadingState'

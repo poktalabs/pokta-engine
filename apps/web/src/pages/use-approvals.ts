@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { ApprovalListResponse } from '@godin-engine/contract'
+import type { ApprovalListResponse } from '@pokta-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
 
 /**

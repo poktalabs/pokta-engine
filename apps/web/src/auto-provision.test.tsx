@@ -8,7 +8,7 @@ import {
   setPrivyState,
 } from '@/test'
 import { useTenantContext } from '@/providers/TenantProvider'
-import type { ErrorEnvelope, TenantView } from '@godin-engine/contract'
+import type { ErrorEnvelope, TenantView } from '@pokta-engine/contract'
 import { brandForPath, LoginScreen } from '@/components/auth/LoginScreen'
 import { render } from '@testing-library/react'
 

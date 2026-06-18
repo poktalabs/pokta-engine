@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { listIntegrations } from '@godin-engine/integrations'
+import { listIntegrations } from '@pokta-engine/integrations'
 
 /**
  * INTEGRATION SEED (P5b) — unit-tests the pure seed logic in `seed-tenants.ts`:
@@ -8,19 +8,19 @@ import { listIntegrations } from '@godin-engine/integrations'
  *   - `seedTenantIntegrations`      — idempotent upsert + disable-not-delete semantics.
  *
  * MOCKING POSTURE (matches the canonical engine-api pattern in
- * {tenants-me,isolation}.test.ts): the @godin-engine/db client throws on import
+ * {tenants-me,isolation}.test.ts): the @pokta-engine/db client throws on import
  * without DATABASE_URL, so it is ALWAYS mocked — but only to hand back `schema`
  * sentinels (the parser/validator never touch the DB; `seedTenantIntegrations`
  * runs against a SMALL IN-MEMORY FAKE db we pass in explicitly). drizzle-orm is
  * mocked to return inspectable tokens so the fake can interpret the upsert/where
- * clauses without a real Postgres. We DO NOT mock @godin-engine/integrations — the
+ * clauses without a real Postgres. We DO NOT mock @pokta-engine/integrations — the
  * validator exercises the REAL `listIntegrations()` registry (like tenants-me does
  * for the workflow registry), so "rejects an id not in the registry" and "accepts
  * the real ids" are real assertions, not tautologies.
  */
 
-// ── @godin-engine/db: only `schema.engineTenantIntegrations` is needed (sentinel) ─
-vi.mock('@godin-engine/db', () => ({
+// ── @pokta-engine/db: only `schema.engineTenantIntegrations` is needed (sentinel) ─
+vi.mock('@pokta-engine/db', () => ({
   db: {}, // never used: seedTenantIntegrations always gets an explicit fake db
   schema: {
     engineTenantIntegrations: {
@@ -34,8 +34,8 @@ vi.mock('@godin-engine/db', () => ({
   },
 }))
 
-// ── @godin-engine/queue: app.ts is not imported here, but keep parity / safe ─────
-vi.mock('@godin-engine/queue', () => ({
+// ── @pokta-engine/queue: app.ts is not imported here, but keep parity / safe ─────
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))

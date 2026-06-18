@@ -1,8 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 /**
- * GET /v1/integrations endpoint tests (P5b). Hermetic: we MOCK @godin-engine/db
- * and @godin-engine/queue so nothing touches Postgres or pg-boss, and the route's
+ * GET /v1/integrations endpoint tests (P5b). Hermetic: we MOCK @pokta-engine/db
+ * and @pokta-engine/queue so nothing touches Postgres or pg-boss, and the route's
  * auth is the in-process service-key path (no Privy verifier needed). The fake db
  * is PREDICATE-AWARE for the engine_tenant_integrations read: forConsumer(db, id)
  * issues `db.select().from(I).where(eq(I.tenantId, id))`, so the mock filters its
@@ -12,7 +12,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
  *
  * The route enriches each stored row with the LIVE integration registry descriptor
  * (displayName/category) via getIntegration(row.integrationId) — we do NOT mock
- * @godin-engine/integrations, so the real registry (notion/resend/shopify/
+ * @pokta-engine/integrations, so the real registry (notion/resend/shopify/
  * mercado-libre) drives the enrichment, exactly as in prod. A stored row whose
  * integration_id is not in the live registry is SKIPPED (defensive). No secret is
  * ever returned: we assert the serialized body contains NONE of the registry
@@ -47,7 +47,7 @@ function tenantFromPredicate(pred: unknown): string | undefined {
   return undefined
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -59,7 +59,7 @@ const REGISTRY: Row[] = [
   { tenantId: 'other', name: 'Other', status: 'active', currency: 'USD', locale: 'en', branding: {}, allowedWorkflows: [], members: [], secretPrefix: 'OTHER' },
 ]
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // The engine_tenant_integrations read is `select().from(I).where(eq(I.tenantId,id))`
   // and is AWAITED directly (no orderBy/limit). The runs read is
   // `select().from(R).where(pred).orderBy().limit()`. We return one object from

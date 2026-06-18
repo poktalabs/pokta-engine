@@ -11,7 +11,7 @@ import {
   type LucideProps,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
-import type { ApprovalView } from '@godin-engine/contract'
+import type { ApprovalView } from '@pokta-engine/contract'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/EmptyState'

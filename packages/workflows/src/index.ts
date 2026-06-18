@@ -1,4 +1,4 @@
-import type { WorkflowManifest, WorkflowModule } from '@godin-engine/contract'
+import type { WorkflowManifest, WorkflowModule } from '@pokta-engine/contract'
 
 // The workflows package is the ONLY place that references workflows by name.
 // engine-api and worker import the aggregate registry below — never an individual

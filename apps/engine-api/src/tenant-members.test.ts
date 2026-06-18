@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *   - removeTenantMember(tenantId, did) — deletes the membership row; afterwards
  *     findTenantByMember(did) resolves to nothing.
  *
- * Hermetic: @godin-engine/db throws on import without DATABASE_URL, so we ALWAYS
+ * Hermetic: @pokta-engine/db throws on import without DATABASE_URL, so we ALWAYS
  * mock it. Here the mock is a TINY in-memory `engine_tenant_members` store that
  * emulates the real constraints — PK(tenant_id, did) for the no-op, and a pg-style
  * `23505` on `tenant_members_did_unique` for the cross-tenant collision — so the
@@ -56,9 +56,9 @@ class FakeUniqueViolation extends Error {
   }
 }
 
-// ── @godin-engine/db: schema columns tagged + an in-memory members table ────────
+// ── @pokta-engine/db: schema columns tagged + an in-memory members table ────────
 // schema columns are tagged so the eq/and markers reveal which column was queried.
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const schema = {
     engineTenants: { tenantId: 'T.tenant_id' },
     engineTenantMembers: { tenantId: 'M.tenant_id', did: 'M.did' },

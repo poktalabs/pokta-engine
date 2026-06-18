@@ -1,4 +1,4 @@
-import type { ApprovalView } from '@godin-engine/contract'
+import type { ApprovalView } from '@pokta-engine/contract'
 
 /**
  * Mi Pase BATCH approval fixtures (M2 P2-B — the hero).

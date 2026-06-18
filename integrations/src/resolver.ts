@@ -20,7 +20,7 @@
  * unconfigured.
  */
 
-import type { IntegrationAccessor, IntegrationFor, IntegrationName } from '@godin-engine/contract'
+import type { IntegrationAccessor, IntegrationFor, IntegrationName } from '@pokta-engine/contract'
 
 /**
  * A provider's factory: given a tenant, return that tenant's configured client.

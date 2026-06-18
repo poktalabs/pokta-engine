@@ -49,10 +49,10 @@ jobs:
         run: pnpm typecheck
 
       - name: Typecheck web SPA
-        run: pnpm --filter @godin-engine/web typecheck
+        run: pnpm --filter @pokta-engine/web typecheck
 
       - name: Apply migrations (creates engine_* tables for the integration test)
-        run: pnpm --filter @godin-engine/db db:migrate
+        run: pnpm --filter @pokta-engine/db db:migrate
 
       - name: Test
         run: pnpm test
