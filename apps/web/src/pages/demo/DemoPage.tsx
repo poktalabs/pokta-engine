@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, Check, Loader2, Lock, Sparkles, X } from 'lucide-react'
+import { ArrowUpRight, Check, Info, Loader2, Lock, Sparkles, X } from 'lucide-react'
 import { BrandLockup } from '@/components/shell/BrandLockup'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -43,6 +43,56 @@ const STAGES: { id: StageId; label: string; sub: string; gate?: boolean }[] = [
   { id: 'send', label: 'Approve send', sub: 'Human gate', gate: true },
   { id: 'sent', label: 'Sent', sub: 'Complete' },
 ]
+
+/** Per-step "how it works" copy for the explainer sidebar. `impl` = built into the
+ *  engine; `!impl` = an integration point (your own system plugs in here). */
+interface InfoPoint {
+  label: string
+  impl: boolean
+  text: string
+}
+const STAGE_INFO: Record<StageId, { heading: string; body: string; points: InfoPoint[] }> = {
+  call: {
+    heading: 'Read the call',
+    body: 'The control plane records the run and enqueues a job. A separate worker — never the control plane — executes it, off the request path. Here it reads the transcript and drafts a structured opportunity.',
+    points: [
+      { label: 'engine-api', impl: true, text: 'Checks policy and writes the run record in one transaction.' },
+      { label: 'queue + worker', impl: true, text: 'The job runs on the worker, not in the API request.' },
+      { label: 'engine_runs', impl: true, text: 'Every run is a first-class, auditable row.' },
+    ],
+  },
+  crm: {
+    heading: 'Gate 1 · CRM review',
+    body: 'Governance opened an approval gate. Nothing is written until a human approves — the agent cannot approve its own work. A gate is two chained runs joined by a first-class approval record.',
+    points: [
+      { label: 'policy: approval', impl: true, text: 'The workflow declares the gate; the engine enforces it.' },
+      { label: 'engine_approvals', impl: true, text: 'A pending record holds the drafted artifact until you decide.' },
+    ],
+  },
+  proposal: {
+    heading: 'Draft + write',
+    body: 'Once you approve, the committed action runs: it writes the CRM row to Notion and drafts the proposal + email. This step is only reachable through an approved gate.',
+    points: [
+      { label: 'Notion', impl: false, text: 'A real integration — your CRM. Swap in Salesforce, HubSpot, etc.' },
+      { label: 'side effects post-gate', impl: true, text: 'Writes only happen after a human approved.' },
+    ],
+  },
+  send: {
+    heading: 'Gate 2 · Send approval',
+    body: 'A second human gate before anything leaves — the reputation / money-impacting step. Same machinery as gate 1: a pending approval record holds the outbound until you decide.',
+    points: [
+      { label: 'policy: approval', impl: true, text: 'Two independent gates in one pipeline.' },
+      { label: 'email integration', impl: false, text: 'The outbound send is your system (Resend here).' },
+    ],
+  },
+  sent: {
+    heading: 'Done',
+    body: 'The committed action ran. The whole pipeline is policy = quota + approval gates. The control plane never runs job code; the worker never enforces policy.',
+    points: [
+      { label: 'audit trail', impl: true, text: 'Every run and approval is recorded and queryable.' },
+    ],
+  },
+}
 
 interface CrmEntry {
   account?: string
@@ -90,6 +140,7 @@ export function DemoPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<StageId>('call')
+  const [infoOpen, setInfoOpen] = useState(false)
   const pollRef = useRef<number | null>(null)
 
   const stopPolling = useCallback(() => {
@@ -288,6 +339,16 @@ export function DemoPage() {
 
         {/* ── right: the single active stage ── */}
         <section className="min-w-0">
+          <div className="mb-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setInfoOpen(true)}
+              className="inline-flex items-center gap-1.5 border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--foreground-soft)] transition-colors hover:bg-[var(--surface-2)]"
+            >
+              <Info className="size-3.5" /> How it works
+            </button>
+          </div>
+
           {error && (
             <p className="mb-5 border border-[var(--status-fail-line)] bg-[var(--status-fail-bg)] px-4 py-3 text-sm text-[var(--status-fail)]">
               {error}
@@ -318,7 +379,102 @@ export function DemoPage() {
           )}
         </section>
       </div>
+
+      <HowItWorksDrawer open={infoOpen} stageId={selected} onClose={() => setInfoOpen(false)} />
     </main>
+  )
+}
+
+function HowItWorksDrawer({
+  open,
+  stageId,
+  onClose,
+}: {
+  open: boolean
+  stageId: StageId
+  onClose: () => void
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!open) return
+    closeRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  const info = STAGE_INFO[stageId]
+  return (
+    <>
+      {/* scrim */}
+      <div
+        aria-hidden={!open}
+        onClick={onClose}
+        className={cn(
+          'fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 motion-reduce:transition-none',
+          open ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+      />
+      {/* panel */}
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="How it works"
+        className={cn(
+          'fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-[92vw] flex-col border-l border-[var(--rule)] bg-[var(--surface)] shadow-[-10px_0_40px_rgba(0,0,0,0.18)] transition-transform duration-300 motion-reduce:transition-none',
+          open ? 'translate-x-0' : 'translate-x-full',
+        )}
+      >
+        <div className="flex items-center justify-between border-b border-[var(--rule)] px-5 py-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[var(--muted-foreground)]">
+              How it works
+            </div>
+            <div className="font-funnel text-lg font-semibold">{info.heading}</div>
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid size-8 place-items-center border border-[var(--border)] text-[var(--foreground-soft)] transition-colors hover:bg-[var(--surface-2)]"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          <p className="text-sm leading-relaxed text-[var(--foreground-soft)]">{info.body}</p>
+
+          <div className="mt-5 flex flex-col gap-3">
+            {info.points.map((p) => (
+              <div key={p.label} className="border border-[var(--border)] p-3">
+                <div className="mb-1 flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em]',
+                      p.impl
+                        ? 'border-[var(--status-ok-line)] bg-[var(--status-ok-bg)] text-[var(--status-ok)]'
+                        : 'border-[var(--status-warn-line)] bg-[var(--status-warn-bg)] text-[var(--status-warn)]',
+                    )}
+                  >
+                    {p.impl ? 'In the engine' : 'Your system'}
+                  </span>
+                  <span className="font-mono text-xs text-[var(--foreground)]">{p.label}</span>
+                </div>
+                <p className="text-sm text-[var(--foreground-soft)]">{p.text}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-6 border-t border-[var(--border)] pt-4 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            Governance is a policy engine: <span className="font-mono">quota</span> +{' '}
+            <span className="font-mono">approval</span>. The control plane never runs job code; the
+            worker never enforces policy.
+          </p>
+        </div>
+      </aside>
+    </>
   )
 }
 
@@ -499,7 +655,7 @@ function StagePanel({
           </a>
         </Button>
         {recordUrl && (
-          <Button asChild variant="secondary" size="lg">
+          <Button asChild variant="secondary" size="lg" className="bg-[var(--surface-2)] hover:bg-[var(--surface-2)]">
             <a href={recordUrl} target="_blank" rel="noreferrer">
               <ArrowUpRight className="size-4" /> Verify the CRM integration
             </a>
