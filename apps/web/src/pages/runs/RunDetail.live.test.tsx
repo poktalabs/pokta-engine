@@ -12,7 +12,7 @@ import {
 } from '@/test'
 import RunDetail from '@/pages/runs/RunDetail'
 import { AppShell } from '@/components/shell/AppShell'
-import type { RunDetail as RunDetailRow, TenantView } from '@godin-engine/contract'
+import type { RunDetail as RunDetailRow, TenantView } from '@pokta-engine/contract'
 
 /**
  * RUN DETAIL — LIVE-PATH ★ (P5b Wave 2).

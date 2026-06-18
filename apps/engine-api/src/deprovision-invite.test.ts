@@ -26,7 +26,7 @@ vi.mock('drizzle-orm', () => ({
   }),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const invAndPair = (m: unknown): { tenantId?: string; email?: string } => {
     const w = m as { and?: unknown[] }
     const out: { tenantId?: string; email?: string } = {}

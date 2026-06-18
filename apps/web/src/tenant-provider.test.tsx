@@ -11,7 +11,7 @@ import {
 } from '@/test'
 import { useTenantContext } from '@/providers/TenantProvider'
 import { AppShell } from '@/components/shell/AppShell'
-import type { TenantView } from '@godin-engine/contract'
+import type { TenantView } from '@pokta-engine/contract'
 
 /**
  * TENANT-FETCH + SPOOF ★ (§6).

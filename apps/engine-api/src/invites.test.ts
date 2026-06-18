@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *     'collision'; pending → marks claimed + binds the member; a cross-tenant
  *     UNIQUE(did) member collision rolls the tx back → 'collision' (claim undone).
  *
- * Hermetic: @godin-engine/db mocked. The transaction mock runs the callback against a
+ * Hermetic: @pokta-engine/db mocked. The transaction mock runs the callback against a
  * tx object whose execute() answers the `... for update` SELECT from the in-memory
  * invites, and whose update()/insert() mutate the same stores — and on a thrown
  * error it ROLLS BACK (restores a snapshot) so the atomicity assertion is real.
@@ -65,7 +65,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // Read the value of a tagged column out of an eq/inArray/ne marker tree.
   const lowercaseEmails = (m: unknown): string[] | undefined => {
     const w = m as { and?: unknown[] }

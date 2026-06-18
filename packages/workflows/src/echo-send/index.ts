@@ -1,4 +1,4 @@
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 
 /** Run 2: the real write/send, executed only after a human approved the gate. */
 export async function run(input: { proposal: string }, ctx: RunContext) {

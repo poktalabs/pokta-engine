@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { PrivyClient } from '@privy-io/server-auth'
-import { EngineError } from '@godin-engine/contract'
+import { EngineError } from '@pokta-engine/contract'
 
 /**
  * Dual-mode consumer auth → `c.set('consumer', Consumer)` (M1.5 / D-4 hardened).

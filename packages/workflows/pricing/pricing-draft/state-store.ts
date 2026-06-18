@@ -6,7 +6,7 @@
  * "desired" rows into `engine_workflow_state` (status=pending, desiredPrice,
  * desiredHash, priorShopify). To keep `run()` testable WITHOUT a live database,
  * that write is performed through this narrow `WorkflowStateStore` interface
- * rather than importing `@godin-engine/db` at the top of the workflow.
+ * rather than importing `@pokta-engine/db` at the top of the workflow.
  *
  *   - In production the worker-invoked `run()` lazily builds the DB-backed store
  *     ({@link createDbWorkflowStateStore}) — a dynamic import so merely importing
@@ -75,7 +75,7 @@ export function desiredHash(input: {
  * the (consumerId, workflowId, sku) primary key.
  */
 export async function createDbWorkflowStateStore(): Promise<WorkflowStateStore> {
-  const { db, schema } = await import('@godin-engine/db')
+  const { db, schema } = await import('@pokta-engine/db')
   return {
     async upsertDesired(rows) {
       if (rows.length === 0) return

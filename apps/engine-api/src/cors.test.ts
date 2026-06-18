@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-// Hermetic: the @godin-engine/db client throws on import without DATABASE_URL, and
+// Hermetic: the @pokta-engine/db client throws on import without DATABASE_URL, and
 // pg-boss must not connect. The CORS middleware runs BEFORE any db/queue access
 // (preflight short-circuits; a real GET 401s in auth before touching the db), so a
 // minimal stub is enough to import ./app.
-vi.mock('@godin-engine/queue', () => ({ getBoss: async () => ({ send: async () => undefined }), QUEUE: 'workflow.run' }))
-vi.mock('@godin-engine/db', () => ({ db: {}, schema: {} }))
+vi.mock('@pokta-engine/queue', () => ({ getBoss: async () => ({ send: async () => undefined }), QUEUE: 'workflow.run' }))
+vi.mock('@pokta-engine/db', () => ({ db: {}, schema: {} }))
 
 import { buildApp, parseCorsOrigins } from './app'
 

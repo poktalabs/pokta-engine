@@ -185,7 +185,7 @@ all behave correctly (mismatch never silently mis-scopes). No DID literal in sou
   when `VITE_USE_MOCKS==='true'`. ✅ TOKEN tests (a live-path request carries `Authorization: Bearer`, never
   `X-Service-Key`; mocked paths still resolve via registry).
 - **W4 — TenantProvider ← `/v1/tenants/me` + router-level tenant guard + server-driven root.** TenantProvider
-  fetches `/v1/tenants/me` (cached React Query, `staleTime`; import `TenantView` from `@godin-engine/contract`)
+  fetches `/v1/tenants/me` (cached React Query, `staleTime`; import `TenantView` from `@pokta-engine/contract`)
   and exposes server branding/currency/locale/`allowedWorkflows`; **delete the hardcoded `TENANTS` record**.
   Root `/` redirect derives from the server tenant id (wait for `/tenants/me`), not a static default. Add a
   **router-level guard under `/:tenant`** (in/around `AppShell`) that redirects when the segment ≠ the

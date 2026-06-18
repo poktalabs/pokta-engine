@@ -5,7 +5,7 @@ import {
   type TenantListResponse,
   inviteListResponseSchema,
   tenantListResponseSchema,
-} from '@godin-engine/contract'
+} from '@pokta-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
 
 /**

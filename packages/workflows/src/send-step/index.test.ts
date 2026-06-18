@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 
 // Mock the resend module (the integration seam). send-step must be fail-soft:
 // ok path -> sendResult.status='ok'; throw path -> status='failed', run resolves.
 const { sendEmail } = vi.hoisted(() => ({ sendEmail: vi.fn() }))
-vi.mock('@godin-engine/integrations', () => ({ sendEmail }))
+vi.mock('@pokta-engine/integrations', () => ({ sendEmail }))
 
 import { run } from './index'
 
@@ -14,7 +14,7 @@ function makeCtx(): RunContext {
     traceId: 'trace_1',
     logger: { info: vi.fn(), error: vi.fn() },
     artifactDir: '/tmp/run_1',
-    // send-step uses the @godin-engine/integrations module directly, not ctx.integration;
+    // send-step uses the @pokta-engine/integrations module directly, not ctx.integration;
     // a throwing stub satisfies the RunContext shape (D2) without being exercised.
     integration: (name: string) => {
       throw new Error(`integration('${name}') not stubbed in this test`)

@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 
 // The graph derivation only reads manifest.id/runtime/policy — not the Zod
 // schema — so we stub `input` to avoid pulling zod into engine-api's deps.
 const anyInput = {} as WorkflowManifest['input']
 
 /**
- * Hermetic dashboard shape test (D6). We MOCK @godin-engine/db so nothing touches
+ * Hermetic dashboard shape test (D6). We MOCK @pokta-engine/db so nothing touches
  * a live Postgres (the db client throws without DATABASE_URL on import), and mock
- * @godin-engine/workflows so the derived graph is asserted against a known set of
+ * @pokta-engine/workflows so the derived graph is asserted against a known set of
  * manifests. The fixtures cover the D3 fail-soft case: a status:'succeeded' run
  * whose send outcome is status:'failed', plus a mid-flight run with no outcome.
  */
@@ -93,7 +93,7 @@ const MANIFESTS: WorkflowManifest[] = [
 
 // ── Mocks (must be before importing the module under test) ──────────────────
 const selectMock = vi.fn()
-vi.mock('@godin-engine/db', () => ({
+vi.mock('@pokta-engine/db', () => ({
   db: {
     select: () => ({ from: () => ({ orderBy: () => ({ limit: () => selectMock() }) }) }),
   },
@@ -102,7 +102,7 @@ vi.mock('@godin-engine/db', () => ({
     engineApprovals: { createdAt: 'created_at' },
   },
 }))
-vi.mock('@godin-engine/workflows', () => ({
+vi.mock('@pokta-engine/workflows', () => ({
   listManifests: () => MANIFESTS,
 }))
 vi.mock('drizzle-orm', () => ({ desc: (x: unknown) => x }))

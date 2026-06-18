@@ -1,5 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm'
-import { db as defaultDb, schema } from '@godin-engine/db'
+import { db as defaultDb, schema } from '@pokta-engine/db'
 import { removeTenantMember } from './tenants'
 
 /**

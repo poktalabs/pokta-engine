@@ -1,12 +1,12 @@
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Mock the LLM so we can assert exactly when it is (and isn't) called.
-vi.mock('@godin-engine/llm', () => ({
+vi.mock('@pokta-engine/llm', () => ({
   completeJSON: vi.fn(),
 }))
 
-import { completeJSON } from '@godin-engine/llm'
+import { completeJSON } from '@pokta-engine/llm'
 import { run } from './index'
 
 const ctx: RunContext = {

@@ -18,7 +18,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *   not-ok; empty/undefined id → not-ok.
  *
  * Canonical mocking pattern (see auth/isolation/scoped-db.test.ts): the
- * @godin-engine/db client throws on import without DATABASE_URL, so we ALWAYS mock it.
+ * @pokta-engine/db client throws on import without DATABASE_URL, so we ALWAYS mock it.
  * The registry + resolveTenant both take an INJECTABLE db arg, so each case passes a
  * recording fake client; the real `db` export is never touched. drizzle-orm is mocked
  * structurally so `eq`/`sql` yield inspectable markers we can read the queried id from.
@@ -35,11 +35,11 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-// ── @godin-engine/db: schema columns tagged so eq-markers reveal the queried column ──
+// ── @pokta-engine/db: schema columns tagged so eq-markers reveal the queried column ──
 // The registry references schema.engineTenants.<col> and schema.engineTenantMembers.<col>.
 // The real `db` is irrelevant — getTenant / findTenantByMember / resolveTenant all
 // accept db as an argument.
-vi.mock('@godin-engine/db', () => ({
+vi.mock('@pokta-engine/db', () => ({
   db: {},
   schema: {
     engineTenants: {

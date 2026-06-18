@@ -4,7 +4,7 @@ import { SignJWT, generateKeyPair, exportSPKI, importSPKI, jwtVerify } from 'jos
 /**
  * AUTH-block spine tests (M1.5 / T1). Focused, hermetic coverage of the dual-mode
  * consumerAuth() middleware surfaced through buildApp({ auth }). We MOCK
- * @godin-engine/db and @godin-engine/queue so nothing touches Postgres or pg-boss
+ * @pokta-engine/db and @pokta-engine/queue so nothing touches Postgres or pg-boss
  * (the db client throws on import without DATABASE_URL), and we never hit the
  * network: the Privy verifier is either injected as a local async fn or, for the
  * "real token" cases, a `jose` ES256 verifier that mirrors what
@@ -28,12 +28,12 @@ const state: {
   updated: Row[]
 } = { runs: [], approvals: [], inserted: [], updated: [] }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const chain = (rows: Row[]) => ({
     from: () => ({
       innerJoin: () => ({
@@ -129,7 +129,7 @@ vi.mock('./tenants', () => ({
 //   - `pricing-apply-flagged` is its `onApprove` target with an all-optional
 //     passthrough input → the approve route's artifact safeParse succeeds.
 const { buildApp } = await import('./app')
-const { gatedTargets } = await import('@godin-engine/workflows')
+const { gatedTargets } = await import('@pokta-engine/workflows')
 
 const dispatchable = { id: 'pricing-draft' }
 const gatedId = 'pricing-apply-flagged'

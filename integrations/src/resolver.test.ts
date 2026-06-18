@@ -4,7 +4,7 @@ import {
   makeIntegrationResolver,
   registerProvider,
   unregisterProvider,
-} from '@godin-engine/integrations'
+} from '@pokta-engine/integrations'
 
 // Stub provider clients — stand-ins for the shopify + mercado-libre modules,
 // which plug into the same registry seam via the worker's provider wiring.

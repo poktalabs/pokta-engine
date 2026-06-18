@@ -1,4 +1,4 @@
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 
 /** Pure work (D-8): no policy, no DB, no human. Returns its input. */
 export async function run(input: { message: string }, ctx: RunContext) {

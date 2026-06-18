@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import type { ErrorEnvelope, RunDetail as RunDetailRow } from '@godin-engine/contract'
+import type { ErrorEnvelope, RunDetail as RunDetailRow } from '@pokta-engine/contract'
 import { useTenant } from '@/providers/TenantProvider'
 import { RunDetailHeader } from '@/components/runs/RunDetailHeader'
 import { RunStatTiles } from '@/components/runs/RunStatTiles'

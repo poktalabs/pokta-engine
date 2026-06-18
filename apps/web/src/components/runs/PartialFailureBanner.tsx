@@ -1,5 +1,5 @@
 import { XCircle } from 'lucide-react'
-import type { ErrorEnvelope } from '@godin-engine/contract'
+import type { ErrorEnvelope } from '@pokta-engine/contract'
 import { Button } from '@/components/ui/button'
 import { Pill } from '@/components/ui/pill'
 import type { RunFlaggedItem } from '@/mocks/runs'

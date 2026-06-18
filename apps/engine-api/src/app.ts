@@ -2,10 +2,10 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import { EngineError } from '@godin-engine/contract'
-import { db } from '@godin-engine/db'
-import { gatedTargets as gatedTargetsOf, getWorkflow, listManifests } from '@godin-engine/workflows'
-import { getIntegration } from '@godin-engine/integrations'
+import { EngineError } from '@pokta-engine/contract'
+import { db } from '@pokta-engine/db'
+import { gatedTargets as gatedTargetsOf, getWorkflow, listManifests } from '@pokta-engine/workflows'
+import { getIntegration } from '@pokta-engine/integrations'
 import type {
   WorkflowManifest,
   WorkspaceWorkflowsResponse,
@@ -15,8 +15,8 @@ import type {
   InviteListResponse,
   MemberRole,
   TenantListResponse,
-} from '@godin-engine/contract'
-import { getBoss, QUEUE, type RunJob } from '@godin-engine/queue'
+} from '@pokta-engine/contract'
+import { getBoss, QUEUE, type RunJob } from '@pokta-engine/queue'
 import { consumerAuth, type AuthOptions, type Consumer } from './auth'
 import { forConsumer, resolveTenant, claimThrottle, CLAIM_THROTTLE_PER_DAY } from './scoped-db'
 import { allowedWorkflowsFor, toTenantView, setMemberRole, listTenants, type TenantRow } from './tenants'

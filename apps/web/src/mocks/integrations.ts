@@ -5,13 +5,13 @@ import { registerMock } from './registry'
  *
  * The dashboard needs an integration **catalog/status** shape — distinct from the
  * run-output `IntegrationResult` (provider 'notion'|'resend') in
- * `@godin-engine/contract`. The catalog type does NOT exist in the contract yet:
+ * `@pokta-engine/contract`. The catalog type does NOT exist in the contract yet:
  * the plan schedules `IntegrationStatus` + `GET /v1/integrations` as a P5a contract
  * addition. Until that lands, the type lives here (mock-only) and the grid is served
  * ONLY behind `VITE_USE_MOCKS` — there is no backend for any of these providers.
  *
  * When the contract type ships, swap this local `IntegrationStatus` for the import
- * from `@godin-engine/contract`; the catalog data below stays put.
+ * from `@pokta-engine/contract`; the catalog data below stays put.
  *
  *   GET /v1/integrations → { integrations: IntegrationStatus[] }
  *
@@ -34,7 +34,7 @@ export type IntegrationConnectionStatus = 'connected' | 'estimated' | 'not-yet-l
 
 /**
  * One integration catalog/status entry — NOT `IntegrationResult` (the run-output
- * type). Local mirror of the planned `@godin-engine/contract` `IntegrationStatus`.
+ * type). Local mirror of the planned `@pokta-engine/contract` `IntegrationStatus`.
  */
 export interface IntegrationStatus {
   /** OPEN provider id (shopify, mercadolibre, gohighlevel, jobtread, …). */

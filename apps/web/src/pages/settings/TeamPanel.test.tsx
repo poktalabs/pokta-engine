@@ -8,7 +8,7 @@ import {
   renderWithProviders,
   setPrivyState,
 } from '@/test'
-import type { InviteView, TenantView } from '@godin-engine/contract'
+import type { InviteView, TenantView } from '@pokta-engine/contract'
 import { useTenantContext } from '@/providers/TenantProvider'
 import { TeamPanel } from '@/pages/settings/TeamPanel'
 

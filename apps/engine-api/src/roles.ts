@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
-import { db as defaultDb, schema } from '@godin-engine/db'
-import type { MemberRole } from '@godin-engine/contract'
+import { db as defaultDb, schema } from '@pokta-engine/db'
+import type { MemberRole } from '@pokta-engine/contract'
 
 /**
  * The ROLE / AUTHZ read layer (admin-roles Wave A) — the single accessor for the

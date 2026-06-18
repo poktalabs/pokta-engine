@@ -14,7 +14,7 @@ import type {
   ErrorEnvelope,
   RejectResponse,
   TenantView,
-} from '@godin-engine/contract'
+} from '@pokta-engine/contract'
 import Approvals from './Approvals'
 
 /**
@@ -39,7 +39,7 @@ import Approvals from './Approvals'
  * assert that one click fires exactly one POST against that id's live path.
  *
  * IMPORTANT (no-mock-render guard): this file imports NO `MOCK_*` value from
- * `@/mocks` — the fixtures below are hand-built from `@godin-engine/contract`
+ * `@/mocks` — the fixtures below are hand-built from `@pokta-engine/contract`
  * types. The production page carries no mock value-import either (that is the
  * point of the spine).
  */

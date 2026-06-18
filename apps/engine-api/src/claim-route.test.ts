@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Wave 1 POST /v1/tenants/claim coverage (D2/D4/D6, anti-enum). Hermetic: @godin-engine/db
- * + @godin-engine/queue mocked; the Privy verifier AND the verified-email resolver are
+ * Wave 1 POST /v1/tenants/claim coverage (D2/D4/D6, anti-enum). Hermetic: @pokta-engine/db
+ * + @pokta-engine/queue mocked; the Privy verifier AND the verified-email resolver are
  * injected OFFLINE via buildApp({ auth, resolvePrivyEmails }). The db mock is an
  * in-memory engine_tenants + engine_tenant_members + engine_tenant_invites + quota
  * ledger that emulates the membership UNIQUE(did) and the claim flow.
@@ -40,7 +40,7 @@ class FakeUniqueViolation extends Error {
   constraint = 'tenant_members_did_unique'
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -56,7 +56,7 @@ vi.mock('drizzle-orm', () => ({
   }),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const didFromMemberJoin = (pred: unknown): string | undefined => {
     const p = pred as { eq?: [string, string] }
     return p?.eq?.[0] === 'M.did' ? p.eq[1] : undefined

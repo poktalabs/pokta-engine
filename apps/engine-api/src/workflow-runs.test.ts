@@ -3,8 +3,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 /**
  * GET /v1/workflows/:id/runs (P5b) — the per-FAMILY run history surface for the
  * operator workspace. Hermetic, modeled on app.test.ts / isolation.test.ts: we
- * MOCK @godin-engine/db (predicate-aware, so the consumer_id + workflowId family
- * filter is REALLY exercised, not tautological) and @godin-engine/queue, and we
+ * MOCK @pokta-engine/db (predicate-aware, so the consumer_id + workflowId family
+ * filter is REALLY exercised, not tautological) and @pokta-engine/queue, and we
  * mock ./tenants so two service-key tenants (A=mi-pase, B=other) are both active
  * with DISJOINT allow-lists. No Postgres.
  *
@@ -81,12 +81,12 @@ function workflowIdsFromPredicate(pred: unknown): string[] | undefined {
   return undefined
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // listRunsForWorkflows → select().from(R).where(and(eq(consumer_id), inArray(workflow_id, ids)))
   //   .orderBy().limit(). Filter by BOTH the consumer_id predicate AND the family ids.
   const runsChain = {

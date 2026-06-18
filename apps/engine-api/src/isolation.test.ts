@@ -99,12 +99,12 @@ function approvalIdFromPredicate(pred: unknown): string | undefined {
   return undefined
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // select() — runs list: .from(R).where(pred).orderBy().limit() filtered by consumer.
   // select({approval:A}) — approvals list: .from(A).innerJoin(R, ...).where(pred)
   //   filtered by the consumer_id predicate (which scopes through the joined run).

@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *       every pre-existing TenantView field (id/name/status/currency/locale/branding/
  *       allowedWorkflows) is unchanged (purely additive, no shape regression).
  *
- * Hermetic: @godin-engine/db is a TINY in-memory store of engine_tenants /
+ * Hermetic: @pokta-engine/db is a TINY in-memory store of engine_tenants /
  * engine_tenant_members(role) / engine_tenant_invites(role) / engine_superadmins, and
  * drizzle-orm is mocked structurally. Privy auth uses an injected OFFLINE verifier (no
  * JWKS fetch); the claim path uses an injected OFFLINE email resolver (no getUser).
@@ -78,7 +78,7 @@ const OTHER: TenantRow = {
   secretPrefix: 'OTHER',
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -95,7 +95,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // Flatten an and([..]) / bare eq marker into { col: val }.
   const pairs = (m: unknown): Record<string, string> => {
     const w = m as { and?: unknown[]; eq?: [string, string]; inArray?: [string, string[]] }

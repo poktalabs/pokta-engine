@@ -8,7 +8,7 @@ import { Hono } from 'hono'
  *      view, approve, or reject a real tenant's run/approval by id;
  *   2. runs are dispatched no-LLM (scripted: true);
  *   3. /demo/api/run is per-IP rate-limited.
- * We MOCK @godin-engine/db so nothing touches Postgres and we can drive the
+ * We MOCK @pokta-engine/db so nothing touches Postgres and we can drive the
  * consumerId of the rows the handlers see.
  */
 
@@ -17,7 +17,7 @@ const findApproval = vi.fn()
 const insertValues = vi.fn().mockResolvedValue(undefined)
 const updateReturning = vi.fn().mockResolvedValue([{ approvalId: 'ap-1' }])
 
-vi.mock('@godin-engine/db', () => ({
+vi.mock('@pokta-engine/db', () => ({
   db: {
     query: {
       engineRuns: { findFirst: (...a: unknown[]) => findRun(...a) },
@@ -40,11 +40,11 @@ vi.mock('@godin-engine/db', () => ({
     engineApprovals: { approvalId: 'approval_id', sourceRunId: 'source_run_id', createdAt: 'created_at' },
   },
 }))
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: vi.fn().mockResolvedValue(undefined) }),
   QUEUE: 'q',
 }))
-vi.mock('@godin-engine/workflows', () => ({
+vi.mock('@pokta-engine/workflows', () => ({
   getWorkflow: () => ({ manifest: { input: { safeParse: () => ({ success: true, data: {} }) } } }),
 }))
 vi.mock('drizzle-orm', () => ({

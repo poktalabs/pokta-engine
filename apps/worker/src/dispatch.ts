@@ -1,4 +1,4 @@
-import type { RunContext, WorkflowManifest } from '@godin-engine/contract'
+import type { RunContext, WorkflowManifest } from '@pokta-engine/contract'
 
 /**
  * The source run that just succeeded, as seen by the dispatch step. Narrowed to

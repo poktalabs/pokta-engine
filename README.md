@@ -23,7 +23,7 @@ packages/{llm,notion,resend,shopify,mercadolibre}/   # fail-soft integration ada
 ```
 
 Monorepo: `apps/*` = deployable services, `packages/*` = shared libraries.
-pnpm + Railway filter by package name (`@godin-engine/*`), so directory layout is
+pnpm + Railway filter by package name (`@pokta-engine/*`), so directory layout is
 free to change. Build/typecheck run through **turbo**; tests through root vitest.
 Each app carries its own `.env.example` / `.env.local`.
 
@@ -32,7 +32,7 @@ Each app carries its own `.env.example` / `.env.local`.
 - The control plane never runs job code; the worker never enforces governance.
 - `run(input, ctx)` is pure + synchronous — no policy, no DB, no human (D-8).
 - The worker is the only writer of post-enqueue run status.
-- Engine code never imports a workflow by name — only the aggregate `@godin-engine/workflows` registry.
+- Engine code never imports a workflow by name — only the aggregate `@pokta-engine/workflows` registry.
 - Approval = two chained runs joined by a first-class `engine_approvals` gate (D-8).
 
 ## Setup

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { installMockFetch, mockLivePath, renderWithProviders, setPrivyState } from '@/test'
-import type { TenantView } from '@godin-engine/contract'
+import type { TenantView } from '@pokta-engine/contract'
 
 /**
  * HARNESS smoke test (PR2b W0 acceptance). Proves the shared utility renders a

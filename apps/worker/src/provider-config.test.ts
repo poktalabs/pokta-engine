@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { hasProvider, makeIntegrationResolver, unregisterProvider } from '@godin-engine/integrations'
+import { hasProvider, makeIntegrationResolver, unregisterProvider } from '@pokta-engine/integrations'
 
 /**
  * T9 — the per-tenant provider wiring (D2 / D9), now sourcing the env secret

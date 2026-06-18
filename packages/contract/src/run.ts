@@ -15,12 +15,12 @@ export type RunStatus = z.infer<typeof runStatusSchema>
  * The provider→client typing lives in `IntegrationClients`, which each provider
  * package augments via declaration merging (the registry seam in the worker).
  * Until a provider is registered its name resolves to `unknown`, so callers in
- * later phases get precise types as the `@godin-engine/integrations` package's
+ * later phases get precise types as the `@pokta-engine/integrations` package's
  * shopify / mercado-libre modules land — without the contract importing it.
  */
 export interface IntegrationClients {
   // Augmented by provider packages, e.g.:
-  //   declare module '@godin-engine/contract' {
+  //   declare module '@pokta-engine/contract' {
   //     interface IntegrationClients { shopify: ShopifyClient }
   //   }
 }

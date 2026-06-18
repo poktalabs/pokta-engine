@@ -1,17 +1,17 @@
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock the LLM so drafting is deterministic (force the scripted path by throwing).
-vi.mock('@godin-engine/llm', () => ({
+vi.mock('@pokta-engine/llm', () => ({
   completeJSON: vi.fn(),
 }))
 // Mock the Notion client module — proposal-step owns the fail-soft try/catch.
-vi.mock('@godin-engine/integrations', () => ({
+vi.mock('@pokta-engine/integrations', () => ({
   commitCrmEntry: vi.fn(),
 }))
 
-import { completeJSON } from '@godin-engine/llm'
-import { commitCrmEntry } from '@godin-engine/integrations'
+import { completeJSON } from '@pokta-engine/llm'
+import { commitCrmEntry } from '@pokta-engine/integrations'
 import { run } from './index'
 
 const ctx: RunContext = {
@@ -19,7 +19,7 @@ const ctx: RunContext = {
   traceId: 'trace-1',
   logger: { info: vi.fn(), error: vi.fn() },
   artifactDir: '/tmp/run-1',
-  // proposal-step uses the @godin-engine/integrations module directly, not ctx.integration;
+  // proposal-step uses the @pokta-engine/integrations module directly, not ctx.integration;
   // a throwing stub satisfies the RunContext shape (D2) without being exercised.
   integration: (name: string) => {
     throw new Error(`integration('${name}') not stubbed in this test`)

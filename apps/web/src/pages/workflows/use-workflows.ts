@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import type {
   RunListResponse,
   WorkspaceWorkflowsResponse,
-} from '@godin-engine/contract'
+} from '@pokta-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
 
 /**

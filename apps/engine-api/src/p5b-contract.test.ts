@@ -9,8 +9,8 @@ import {
   type IntegrationStatus,
   type WorkspaceWorkflowsResponse,
   type IntegrationListResponse,
-} from '@godin-engine/contract'
-import { listManifests } from '@godin-engine/workflows'
+} from '@pokta-engine/contract'
+import { listManifests } from '@pokta-engine/workflows'
 import { WORKSPACE_CARD_CATALOG } from './workspace-cards'
 
 /**

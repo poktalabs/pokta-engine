@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *   advisory seat lock: the addInvite path calls withTenantSeatLock BEFORE counting +
  *   inserting, so a check-then-insert race cannot exceed the cap.
  *
- * Hermetic: @godin-engine/db is a tiny mock store; drizzle-orm is mocked structurally
+ * Hermetic: @pokta-engine/db is a tiny mock store; drizzle-orm is mocked structurally
  * so eq/and yield inspectable markers the mock reads. The advisory-lock `execute` is a
  * recorded no-op so we can assert the lock fires before the count/insert SQL.
  */
@@ -68,7 +68,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // Flatten an and([..]) / bare eq marker into { col: val }.
   const pairs = (m: unknown): Record<string, string> => {
     const w = m as { and?: unknown[]; eq?: [string, string] }
@@ -385,7 +385,7 @@ describe('★ the seat cap is checked under the per-tenant advisory lock', () =>
         local.push('lock')
         return []
       },
-    } as unknown as typeof import('@godin-engine/db').db
+    } as unknown as typeof import('@pokta-engine/db').db
     const out = await withTenantSeatLock(T, tx, async () => {
       local.push('fn')
       return 'ran'

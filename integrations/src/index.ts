@@ -7,7 +7,7 @@
  * (identity + secret keys) plus a `create(config)` factory.
  *
  * This file ALSO re-exports each integration's `create*` factory + client/config
- * TYPES so callers import everything from `@godin-engine/integrations` (the only
+ * TYPES so callers import everything from `@pokta-engine/integrations` (the only
  * import specifier for integrations now). And it OWNS the contract type registry:
  * the `IntegrationClients` declaration-merge below teaches `ctx.integration(name)`
  * the concrete client type for each per-tenant provider.
@@ -123,7 +123,7 @@ import type { MercadoLibreClient } from './mercado-libre/index.js'
  * workflow, WITHOUT the contract package importing this package. The integrations
  * package OWNS this registry (moved out of the worker's provider-config).
  */
-declare module '@godin-engine/contract' {
+declare module '@pokta-engine/contract' {
   interface IntegrationClients {
     shopify: ShopifyClient
     'mercado-libre': MercadoLibreClient

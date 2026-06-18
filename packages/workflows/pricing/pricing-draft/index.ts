@@ -1,10 +1,10 @@
-import type { RunContext } from '@godin-engine/contract'
+import type { RunContext } from '@pokta-engine/contract'
 import type {
   Catalog,
   ShopifyClient,
   MercadoLibreClient,
   MLSearchResult,
-} from '@godin-engine/integrations'
+} from '@pokta-engine/integrations'
 
 import {
   buildProductIdentityFromShopify,
@@ -37,7 +37,7 @@ import {
  * precise `shopify` / `mercado-libre` client types WITHOUT the contract importing
  * either package. (Last-write-wins module augmentation; matches the seam doc.)
  */
-declare module '@godin-engine/contract' {
+declare module '@pokta-engine/contract' {
   interface IntegrationClients {
     shopify: ShopifyClient
     'mercado-libre': MercadoLibreClient

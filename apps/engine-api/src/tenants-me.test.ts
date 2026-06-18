@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { listManifests } from '@godin-engine/workflows'
+import { listManifests } from '@pokta-engine/workflows'
 
 /**
  * TENANTS/ME block (T6 / §6) — drives `GET /v1/tenants/me` on `buildApp()`.
@@ -16,10 +16,10 @@ import { listManifests } from '@godin-engine/workflows'
  *   - branding without a badge               → TenantView.branding omits `badge`.
  *
  * MOCKING POSTURE (matches the canonical engine-api pattern in
- * {auth,isolation,m1-regression}.test.ts): the @godin-engine/db client throws on
- * import without DATABASE_URL, so it is ALWAYS mocked; @godin-engine/queue is
+ * {auth,isolation,m1-regression}.test.ts): the @pokta-engine/db client throws on
+ * import without DATABASE_URL, so it is ALWAYS mocked; @pokta-engine/queue is
  * mocked too (the /v1/tenants/me path never dispatches, but buildApp imports it).
- * We DO NOT mock ./tenants, @godin-engine/workflows, or @godin-engine/integrations
+ * We DO NOT mock ./tenants, @pokta-engine/workflows, or @pokta-engine/integrations
  * — so toTenantView()/allowedWorkflowsFor() run for REAL against the live workflow
  * + integration registries. That is what makes "integrations validated vs
  * listIntegrations()" and "allowedWorkflows filtered to the live set" real
@@ -70,7 +70,7 @@ const VINO_PENDING: TenantRow = {
   secretPrefix: 'VINO',
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -87,7 +87,7 @@ vi.mock('@godin-engine/queue', () => ({
  * row(s) and projects { tenant }. The drizzle-orm mock encodes `eq(col, val)` as
  * { eq: [col, val] }, so the mock reads the queried DID off the where-marker.
  */
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const findFirst = async ({ where }: { where: { eq?: [string, string] } }) => {
     const wantId = where?.eq?.[0] === 'tenant_id' ? where.eq[1] : undefined
     if (wantId === undefined) return undefined

@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { desc, sql } from 'drizzle-orm'
-import { db, schema } from '@godin-engine/db'
-import { listManifests } from '@godin-engine/workflows'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import { db, schema } from '@pokta-engine/db'
+import { listManifests } from '@pokta-engine/workflows'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 import { buildOverview, type Overview } from './dashboard'
 import { consolePage } from './console-page'
 

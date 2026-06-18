@@ -8,7 +8,7 @@ import {
   renderWithProviders,
   setPrivyState,
 } from '@/test'
-import type { ErrorEnvelope, TenantView } from '@godin-engine/contract'
+import type { ErrorEnvelope, TenantView } from '@pokta-engine/contract'
 import { AppShell } from '@/components/shell/AppShell'
 
 /**

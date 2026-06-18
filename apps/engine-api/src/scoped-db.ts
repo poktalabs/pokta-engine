@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
-import { EngineError } from '@godin-engine/contract'
-import type { WorkflowCard } from '@godin-engine/contract'
-import { db as defaultDb, schema } from '@godin-engine/db'
+import { EngineError } from '@pokta-engine/contract'
+import type { WorkflowCard } from '@pokta-engine/contract'
+import { db as defaultDb, schema } from '@pokta-engine/db'
 import type { Consumer } from './auth'
 import { findTenantByMember, getTenant, isActive, type TenantRow } from './tenants'
 

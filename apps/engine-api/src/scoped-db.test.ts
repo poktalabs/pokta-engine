@@ -25,11 +25,11 @@ vi.mock('drizzle-orm', () => ({
   }),
 }))
 
-// ── @godin-engine/db: schema columns are tagged string markers ───────────────
+// ── @pokta-engine/db: schema columns are tagged string markers ───────────────
 // The accessors reference schema.engineRuns.<col> / schema.engineApprovals.<col>.
 // We give each a unique, identifiable token so `eq` markers reveal which column
 // was compared. The real `db` is irrelevant — forConsumer takes db as an arg.
-vi.mock('@godin-engine/db', () => ({
+vi.mock('@pokta-engine/db', () => ({
   db: {},
   schema: {
     engineRuns: {

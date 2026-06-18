@@ -34,7 +34,7 @@ import {
   createMercadoLibreClient,
   type MercadoLibreConfig,
   registerProvider,
-} from '@godin-engine/integrations'
+} from '@pokta-engine/integrations'
 // The tenant registry is the SOURCE OF TRUTH for a tenant's env secret-prefix now
 // (PR2 T7). The worker imports the SAME registry accessor the engine-api uses
 // (apps/engine-api/src/tenants.ts) — each process keeps its own ~60s TTL cache.

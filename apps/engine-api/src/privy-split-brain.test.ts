@@ -56,12 +56,12 @@ function tenant(overrides: Partial<TenantRow>): TenantRow {
   }
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // getTenant(id): query.engineTenants.findFirst({ where: eq(tenant_id, id) })
   const findFirst = async ({ where }: { where: { eq?: [string, string] } }) => {
     const wantId = where?.eq?.[0] === 'tenant_id' ? where.eq[1] : undefined

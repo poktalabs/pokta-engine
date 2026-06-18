@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Cpu, ShieldAlert, X } from 'lucide-react'
-import type { ApprovalView } from '@godin-engine/contract'
+import type { ApprovalView } from '@pokta-engine/contract'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Pill } from '@/components/ui/pill'

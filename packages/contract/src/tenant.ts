@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /**
  * The tenant lifecycle status (mirrors the `tenant_status` pg enum in
- * @godin-engine/db). Only `'active'` tenants resolve + dispatch; `'pending'` and
+ * @pokta-engine/db). Only `'active'` tenants resolve + dispatch; `'pending'` and
  * `'disabled'` fail closed at resolveTenant and GET /v1/tenants/me.
  */
 export const tenantStatusSchema = z.enum(['active', 'pending', 'disabled'])
@@ -61,7 +61,7 @@ export type TenantView = z.infer<typeof tenantViewSchema>
 
 /**
  * The lifecycle status of an invite (mirrors the `invite_status` pg enum in
- * @godin-engine/db): `pending` (seeded, unclaimed), `claimed` (a verified DID is
+ * @pokta-engine/db): `pending` (seeded, unclaimed), `claimed` (a verified DID is
  * bound), `revoked` (deprovisioned — frees the email to be re-invited).
  */
 export const inviteStatusSchema = z.enum(['pending', 'claimed', 'revoked'])

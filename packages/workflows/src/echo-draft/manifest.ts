@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 
 /**
  * Approval-gated draft (spike step 10). Run 1 of the chained pair: produces a

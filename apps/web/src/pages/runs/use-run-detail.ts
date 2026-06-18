@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { RunDetail } from '@godin-engine/contract'
+import type { RunDetail } from '@pokta-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
 
 /**

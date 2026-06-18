@@ -1,5 +1,5 @@
 {
-  "name": "@godin-engine/web",
+  "name": "@pokta-engine/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "@fontsource-variable/funnel-display": "^5.2.5",
     "@fontsource-variable/manrope": "^5.2.5",
     "@fontsource-variable/source-serif-4": "^5.2.5",
-    "@godin-engine/contract": "workspace:*",
+    "@pokta-engine/contract": "workspace:*",
     "@privy-io/react-auth": "^3.28.0",
     "@radix-ui/react-slot": "^1.2.4",
     "@sentry/react": "^10.42.0",

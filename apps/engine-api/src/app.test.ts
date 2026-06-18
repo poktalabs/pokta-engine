@@ -2,8 +2,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { SignJWT, generateKeyPair, exportSPKI } from 'jose'
 
 /**
- * Security-spine tests (M1.5 / T1-T3). Hermetic: we MOCK @godin-engine/db and
- * @godin-engine/queue so nothing touches Postgres or pg-boss, and we inject an
+ * Security-spine tests (M1.5 / T1-T3). Hermetic: we MOCK @pokta-engine/db and
+ * @pokta-engine/queue so nothing touches Postgres or pg-boss, and we inject an
  * OFFLINE Privy verifier via buildApp({ auth: { verifyPrivyToken } }) so no JWKS
  * fetch happens. Tokens are minted locally with `jose` (ES256) only to exercise
  * the seam contract (the real prod path uses @privy-io/server-auth).
@@ -19,7 +19,7 @@ function whereMatch(rows: Row[]): Row[] {
   return rows
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -39,7 +39,7 @@ const REGISTRY: Row[] = [
   { tenantId: 'other', name: 'Other', status: 'active', currency: 'USD', locale: 'en', branding: {}, allowedWorkflows: [], members: [], secretPrefix: 'OTHER' },
 ]
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // Pull the queried DID out of an `eq(M.did, did)` where-marker.
   const didFrom = (pred: unknown): string | undefined => {
     const p = pred as { eq?: [string, string] }

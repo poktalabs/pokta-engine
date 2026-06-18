@@ -1,4 +1,4 @@
-import type { ApprovalListResponse, ApprovalView } from '@godin-engine/contract'
+import type { ApprovalListResponse, ApprovalView } from '@pokta-engine/contract'
 
 /**
  * Vino SINGLE-ACTION approval fixtures (M2 P2-C).

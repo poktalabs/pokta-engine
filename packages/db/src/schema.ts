@@ -113,7 +113,7 @@ export const engineWorkflowState = pgTable(
  *
  *   - `status` — only `'active'` tenants may resolve/dispatch (pending/disabled
  *     fail closed at resolveTenant + GET /v1/tenants/me).
- *   - `branding` — typed against `TenantView.branding` in @godin-engine/contract
+ *   - `branding` — typed against `TenantView.branding` in @pokta-engine/contract
  *     (`{ name: string; badge?: string }`); display-only, never authz.
  *   - `allowedWorkflows` — the per-tenant workflow allow-list. The control plane
  *     filters list surfaces by it and gates dispatch to it (a disallowed id is a

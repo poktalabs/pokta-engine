@@ -1,7 +1,7 @@
 import { and, eq, inArray, ne, sql } from 'drizzle-orm'
-import { db as defaultDb, schema } from '@godin-engine/db'
-import { EngineError } from '@godin-engine/contract'
-import type { MemberRole } from '@godin-engine/contract'
+import { db as defaultDb, schema } from '@pokta-engine/db'
+import { EngineError } from '@pokta-engine/contract'
+import type { MemberRole } from '@pokta-engine/contract'
 import { addTenantMember, getTenant, isActive, MemberDidCollisionError } from './tenants'
 import { seatCount, withTenantSeatLock } from './roles'
 

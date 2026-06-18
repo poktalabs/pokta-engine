@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { WorkflowManifest } from '@godin-engine/contract'
+import type { WorkflowManifest } from '@pokta-engine/contract'
 
 /**
  * Vino pipeline, step 2 (agent runtime). Dispatched only after gate 1 approves

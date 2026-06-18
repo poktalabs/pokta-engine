@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 /**
  * Per-tenant workflow ALLOW-LIST tests (PR2 T5, §6 ALLOW-LIST block). The registry
- * (`@godin-engine/workflows`) stays PURE — it knows nothing about tenants — so the
+ * (`@pokta-engine/workflows`) stays PURE — it knows nothing about tenants — so the
  * allow-list is enforced in the engine-api control plane (`app.ts`): a workflow id
  * is dispatchable by a tenant iff it is BOTH in that tenant's `allowedWorkflows`
  * AND a live registry workflow. A disallowed/cross-tenant workflow is a 404
@@ -13,12 +13,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
  * getWorkflow, so a KNOWN-but-disallowed id (e.g. mi-pase POSTing vino's
  * 'call-intake') is indistinguishable at the boundary from a TRULY-unknown id.
  *
- * Mocking: @godin-engine/db + @godin-engine/queue + drizzle-orm are mocked
+ * Mocking: @pokta-engine/db + @pokta-engine/queue + drizzle-orm are mocked
  * (db client throws without DATABASE_URL on import) per the canonical engine-api
  * pattern. We MOCK ./tenants (the registry) to seed two tenants with DISJOINT
  * allow-lists — both ACTIVE so resolveTenant succeeds and execution reaches the
  * allow-list gate (this isolates the allow-list DIMENSION from status gating,
- * which RESOLVE/TENANTS-ME tests own). We do NOT mock @godin-engine/workflows —
+ * which RESOLVE/TENANTS-ME tests own). We do NOT mock @pokta-engine/workflows —
  * the REAL manifests validate input and the REAL listManifests() backs the
  * allow-list ∩ live-registry intersection, so the filter is a genuine test.
  */
@@ -26,12 +26,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 type Row = Record<string, unknown>
 const state: { inserted: Row[] } = { inserted: [] }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   const chain = (rows: Row[]) => ({
     from: () => ({
       innerJoin: () => ({ where: () => ({ orderBy: () => ({ limit: async () => rows.map((r) => ({ approval: r })) }) }) }),
@@ -92,7 +92,7 @@ const TENANTS: Record<string, { status: 'active' | 'pending' | 'disabled'; allow
 vi.mock('./tenants', async () => {
   // Pull the REAL listManifests through so allowedWorkflowsFor intersects with the
   // live registry (matches production tenants.ts behavior) — keeps the filter honest.
-  const { listManifests } = await import('@godin-engine/workflows')
+  const { listManifests } = await import('@pokta-engine/workflows')
   const live = () => new Set(listManifests().map((m) => m.id))
   return {
     getTenant: async (id: string) => {
@@ -230,7 +230,7 @@ describe('ALLOW-LIST — list surface (GET /v1/workflows) filtered per tenant', 
   })
 
   it('each tenant\'s list is a SUBSET of the live registry ∩ its allow-list (no phantom ids)', async () => {
-    const { listManifests } = await import('@godin-engine/workflows')
+    const { listManifests } = await import('@pokta-engine/workflows')
     const liveIds = new Set(listManifests().map((m) => m.id))
     const app = buildApp()
     for (const [hdr, tenant] of [[MIPASE, 'mi-pase'], [VINO, 'vino']] as const) {

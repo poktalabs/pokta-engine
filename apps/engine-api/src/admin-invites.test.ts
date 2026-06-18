@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Wave 3 — operator-gated admin invite management (POST/GET/DELETE
- * /admin/tenants/:tenantId/invites). Hermetic: @godin-engine/db + @godin-engine/queue
+ * /admin/tenants/:tenantId/invites). Hermetic: @pokta-engine/db + @pokta-engine/queue
  * mocked, no Postgres/pg-boss. The db mock is a TINY in-memory engine_tenant_invites
  * + engine_tenant_members store that emulates the real constraints exercised by the
  * routes (PK (tenant_id, email), the partial unique ACTIVE-email index, the FK on a
@@ -52,7 +52,7 @@ class ActiveEmailUnique extends Error {
   }
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -69,7 +69,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // Pull the (tenantId,email) pair out of an and(eq(V.tenant_id,..),eq(V.email,..)).
   const invitePair = (m: unknown): { tenantId?: string; email?: string } => {
     const w = m as { and?: unknown[] }

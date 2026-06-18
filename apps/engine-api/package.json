@@ -1,5 +1,5 @@
 {
-  "name": "@godin-engine/engine-api",
+  "name": "@pokta-engine/engine-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,11 +11,11 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@godin-engine/contract": "workspace:*",
-    "@godin-engine/db": "workspace:*",
-    "@godin-engine/integrations": "workspace:*",
-    "@godin-engine/queue": "workspace:*",
-    "@godin-engine/workflows": "workspace:*",
+    "@pokta-engine/contract": "workspace:*",
+    "@pokta-engine/db": "workspace:*",
+    "@pokta-engine/integrations": "workspace:*",
+    "@pokta-engine/queue": "workspace:*",
+    "@pokta-engine/workflows": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@privy-io/server-auth": "^1.32.5",
     "drizzle-orm": "^0.38.2",

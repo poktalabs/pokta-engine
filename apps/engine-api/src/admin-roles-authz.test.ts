@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  *   (5) requireTenantAdmin lets a SUPERADMIN through for ANY tenant — even one it is not
  *       a member of.
  *
- * Hermetic: @godin-engine/db + @godin-engine/queue mocked (TINY in-memory engine_tenants
+ * Hermetic: @pokta-engine/db + @pokta-engine/queue mocked (TINY in-memory engine_tenants
  * / engine_tenant_members(role) / engine_tenant_invites(role) / engine_superadmins store);
  * drizzle-orm mocked structurally; Privy auth via an injected offline verifier on buildApp.
  * The db mock is the same shape as admin-roles.test.ts so the routes exercise their REAL
@@ -88,7 +88,7 @@ class ActiveEmailUnique extends Error {
   }
 }
 
-vi.mock('@godin-engine/queue', () => ({
+vi.mock('@pokta-engine/queue', () => ({
   getBoss: async () => ({ send: async () => undefined }),
   QUEUE: 'workflow.run',
 }))
@@ -105,7 +105,7 @@ vi.mock('drizzle-orm', () => ({
   ),
 }))
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // Flatten an and([..]) / bare eq marker into { col: val }.
   const pairs = (m: unknown): Record<string, string> => {
     const w = m as { and?: unknown[]; eq?: [string, string] }

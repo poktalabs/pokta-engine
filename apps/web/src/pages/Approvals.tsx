@@ -5,7 +5,7 @@ import type {
   ApproveResponse,
   ErrorEnvelope,
   RejectResponse,
-} from '@godin-engine/contract'
+} from '@pokta-engine/contract'
 import { ApiError, apiFetch } from '@/lib/api'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'

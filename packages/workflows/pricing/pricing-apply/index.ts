@@ -1,5 +1,5 @@
-import type { RunContext } from '@godin-engine/contract'
-import type { ShopifyClient } from '@godin-engine/integrations'
+import type { RunContext } from '@pokta-engine/contract'
+import type { ShopifyClient } from '@pokta-engine/integrations'
 
 import type { ApplySku, PricingApplyInput } from './manifest.js'
 import {
@@ -14,7 +14,7 @@ import {
  * a precise `ShopifyClient` type WITHOUT the contract importing the package.
  * (Last-write-wins module augmentation; matches the pricing-draft seam.)
  */
-declare module '@godin-engine/contract' {
+declare module '@pokta-engine/contract' {
   interface IntegrationClients {
     shopify: ShopifyClient
   }

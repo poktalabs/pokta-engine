@@ -14,7 +14,7 @@ import type {
   TenantView,
   WorkflowCard,
   WorkspaceWorkflowsResponse,
-} from '@godin-engine/contract'
+} from '@pokta-engine/contract'
 import { useTenantContext } from '@/providers/TenantProvider'
 import WorkflowsList from './WorkflowsList'
 

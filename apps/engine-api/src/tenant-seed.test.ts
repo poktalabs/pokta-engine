@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * pending) and `seedTenants` runs validation BEFORE any write (a bad set never
  * reaches the DB).
  *
- * Hermetic: `@godin-engine/db` throws without DATABASE_URL on import, so it is
+ * Hermetic: `@pokta-engine/db` throws without DATABASE_URL on import, so it is
  * MOCKED (canonical engine-api pattern). The workflows package is REAL — the
  * allow-list cross-check runs against the actual manifest ids, so a workflow
  * rename would (correctly) break these tests rather than silently passing.
@@ -30,7 +30,7 @@ const writes: {
   memberBinds: Array<{ tenantId: string; did: string; source: unknown }> // engine_tenant_members inserts
 } = { upserts: [], conflicts: [], memberBinds: [] }
 
-vi.mock('@godin-engine/db', () => {
+vi.mock('@pokta-engine/db', () => {
   // The drizzle table marker passed to db.insert(<table>) tells the mock WHICH
   // table is being written (the schema mock tags each).
   const insert = (table: { __table?: string } | undefined) => {
@@ -71,7 +71,7 @@ vi.mock('@godin-engine/db', () => {
   }
 })
 
-import { listManifests } from '@godin-engine/workflows'
+import { listManifests } from '@pokta-engine/workflows'
 import {
   TENANT_SEEDS,
   validateSeeds,

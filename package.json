@@ -14,11 +14,11 @@
     "test:watch": "vitest",
     "check:scoped": "bash scripts/check-scoped-db.sh",
     "check:no-mock-render": "bash scripts/check-no-mock-render.sh",
-    "dev:api": "pnpm --filter @godin-engine/engine-api dev",
-    "dev:worker": "pnpm --filter @godin-engine/worker dev",
-    "db:generate": "pnpm --filter @godin-engine/db db:generate",
-    "db:migrate": "pnpm --filter @godin-engine/db db:migrate",
-    "db:push": "pnpm --filter @godin-engine/db db:push"
+    "dev:api": "pnpm --filter @pokta-engine/engine-api dev",
+    "dev:worker": "pnpm --filter @pokta-engine/worker dev",
+    "db:generate": "pnpm --filter @pokta-engine/db db:generate",
+    "db:migrate": "pnpm --filter @pokta-engine/db db:migrate",
+    "db:push": "pnpm --filter @pokta-engine/db db:push"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

@@ -15,8 +15,8 @@
     ]
   },
   "deploy": {
-    "preDeployCommand": "pnpm --filter @godin-engine/db db:migrate && pnpm --filter @godin-engine/engine-api db:seed",
-    "startCommand": "pnpm --filter @godin-engine/engine-api start",
+    "preDeployCommand": "pnpm --filter @pokta-engine/db db:migrate && pnpm --filter @pokta-engine/engine-api db:seed",
+    "startCommand": "pnpm --filter @pokta-engine/engine-api start",
     "healthcheckPath": "/",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",

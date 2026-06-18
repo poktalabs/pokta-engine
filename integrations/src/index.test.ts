@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getIntegration, listIntegrations } from '@godin-engine/integrations'
+import { getIntegration, listIntegrations } from '@pokta-engine/integrations'
 
 describe('integration registry', () => {
   it('lists the four integration descriptors with stable ids', () => {

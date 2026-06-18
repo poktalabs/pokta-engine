@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { installMockFetch, mockLivePath, privyMockSpies, renderWithProviders, setPrivyState } from '@/test'
 import { TopBar } from '@/components/shell/TopBar'
-import type { TenantView } from '@godin-engine/contract'
+import type { TenantView } from '@pokta-engine/contract'
 
 /**
  * TopBar identity + sign-out (fix/web-topbar-identity). The shell chrome must

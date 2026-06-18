@@ -1,4 +1,4 @@
-import type { RunListItem, RunStatus } from '@godin-engine/contract'
+import type { RunListItem, RunStatus } from '@pokta-engine/contract'
 
 /**
  * Workflows surface fixtures (M2 P3-A).

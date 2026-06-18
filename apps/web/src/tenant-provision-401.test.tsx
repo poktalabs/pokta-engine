@@ -9,7 +9,7 @@ import {
   setPrivyState,
 } from '@/test'
 import { useTenantContext } from '@/providers/TenantProvider'
-import type { ErrorEnvelope, TenantView } from '@godin-engine/contract'
+import type { ErrorEnvelope, TenantView } from '@pokta-engine/contract'
 
 /**
  * AUTO-PROVISION ★ — masked-401 / claim-no-loop CRITICAL regression
