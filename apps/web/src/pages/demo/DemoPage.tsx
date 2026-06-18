@@ -31,6 +31,8 @@ Maria: Somewhere around $120–150k. I want a clear line-item breakdown.
 Sales: Timeline?
 Maria: Hoping to start in ~8 weeks, done before the holidays.`
 
+const BOOK_A_CALL_URL = 'https://cal.com/poktalabs'
+
 type StageId = 'call' | 'crm' | 'proposal' | 'send' | 'sent'
 type StageStatus = 'idle' | 'active' | 'done' | 'rejected'
 
@@ -210,12 +212,19 @@ export function DemoPage() {
           <span className="border border-[var(--rule)] bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--primary-foreground)]">
             Live demo
           </span>
-          <a
-            href="/"
-            className="ml-auto text-sm font-medium text-[var(--accent-text)] underline-offset-4 hover:underline"
-          >
-            Sign in →
-          </a>
+          <div className="ml-auto flex items-center gap-4">
+            <a
+              href="/"
+              className="text-sm font-medium text-[var(--foreground-soft)] underline-offset-4 hover:underline"
+            >
+              Sign in
+            </a>
+            <Button asChild size="sm">
+              <a href={BOOK_A_CALL_URL} target="_blank" rel="noreferrer">
+                Book a call
+              </a>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -475,15 +484,28 @@ function StagePanel({
   }
 
   // sent
+  const recordUrl = proposalOut?.crmResult?.url
   return (
-    <Panel kicker="Complete" title="Sent">
+    <Panel kicker="Complete" title="That’s the engine — drafted, gated, executed.">
       <p className="mb-4 max-w-[60ch] text-[var(--foreground-soft)]">
-        The approved email was dispatched. Every step ran through the engine with you in the loop at
-        each gate.
+        The approved email was dispatched and the CRM row is in Notion. Every step ran with you in
+        the loop at each gate. Want this on your own stack?
       </p>
       <NotionResult result={proposalOut?.crmResult} demoRef={demoRef} />
-      <div className="mt-5">
-        <Button onClick={onRunAgain} variant="secondary" size="sm">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <Button asChild size="lg">
+          <a href={BOOK_A_CALL_URL} target="_blank" rel="noreferrer">
+            Book a call
+          </a>
+        </Button>
+        {recordUrl && (
+          <Button asChild variant="secondary" size="lg">
+            <a href={recordUrl} target="_blank" rel="noreferrer">
+              <ArrowUpRight className="size-4" /> Verify the CRM integration
+            </a>
+          </Button>
+        )}
+        <Button onClick={onRunAgain} variant="ghost" size="sm">
           <Sparkles className="size-4" /> Run it again
         </Button>
       </div>
@@ -592,16 +614,6 @@ function NotionResult({ result, demoRef }: { result?: CrmResult; demoRef: string
           <span className="text-[var(--muted-foreground)]">
             (tagged <span className="font-mono">demo-{demoRef}</span>)
           </span>
-        )}
-        {result.url && (
-          <a
-            href={result.url}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto inline-flex items-center gap-0.5 font-medium text-[var(--accent-text)] underline-offset-4 hover:underline"
-          >
-            Open in Notion <ArrowUpRight className="size-3.5" />
-          </a>
         )}
       </div>
       {result.status === 'simulated' && (
