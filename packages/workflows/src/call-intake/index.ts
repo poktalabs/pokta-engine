@@ -1,5 +1,6 @@
 import type { RunContext } from '@godin-engine/contract'
 import { completeJSON } from '@godin-engine/llm'
+import { pickScenario } from '../demo-scenarios'
 
 export interface Extraction {
   client: string
@@ -33,6 +34,13 @@ export interface IntakeOutput {
    * chain stays LLM-free, not just step 1.
    */
   scripted?: boolean
+  /**
+   * Per-run demo ref (e.g. "A7F3"). Baked into the scripted CRM opportunity title +
+   * a tag so each public demo run writes a UNIQUE, recognizable Notion row (not a
+   * repeated identical scripted entry). Surfaced in the demo UI so the visitor can
+   * find THEIR row in Notion.
+   */
+  demoRef?: string
 }
 
 const SYSTEM = `You are an operations agent for Vino Design Build, a residential construction / design-build firm.
@@ -45,35 +53,9 @@ Return JSON: {
   "crmEntry": { "account": string, "contactName": string, "opportunityName": string, "stage": string, "estimatedValue": string, "summary": string, "tags": string[] }
 }`
 
-const SCRIPTED: { extraction: Extraction; crmEntry: CrmEntry } = {
-  extraction: {
-    client: 'Acme Renovations (homeowner: the Delgados)',
-    contact: 'Maria Delgado',
-    projectType: 'Kitchen + primary bathroom remodel',
-    scopeHighlights: [
-      'Full kitchen gut: cabinets, quartz counters, island with seating',
-      'Primary bath: walk-in shower, double vanity, heated floor',
-      'Open up wall between kitchen and dining (verify load-bearing)',
-    ],
-    budgetSignal: 'Comfortable around $120–150k; wants a clear line-item breakdown',
-    timeline: 'Hoping to start in ~8 weeks; done before the holidays',
-    risks: ['Possible load-bearing wall', 'HOA approval for any exterior changes', 'Long lead time on chosen tile'],
-    nextSteps: ['Send line-item proposal', 'Schedule on-site measure', 'Confirm structural engineer for the wall'],
-  },
-  crmEntry: {
-    account: 'Acme Renovations — Delgado Residence',
-    contactName: 'Maria Delgado',
-    opportunityName: 'Delgado Kitchen + Primary Bath Remodel',
-    stage: 'Proposal',
-    estimatedValue: '$135,000',
-    summary:
-      'Discovery call covered a full kitchen gut and primary bath remodel with an open-concept wall removal. Budget comfort ~$120–150k. Next: line-item proposal + on-site measure; flag load-bearing wall and tile lead time.',
-    tags: ['remodel', 'kitchen', 'bath', 'proposal-ready'],
-  },
-}
 
 export async function run(
-  input: { transcript: string; source?: string; scripted?: boolean },
+  input: { transcript: string; source?: string; scripted?: boolean; demoRef?: string },
   ctx: RunContext,
 ): Promise<IntakeOutput> {
   const source = input.source ?? 'Granola call'
@@ -82,7 +64,26 @@ export async function run(
   // an LLM request. `scripted: true` is echoed so it threads into proposal-step.
   if (input.scripted) {
     ctx.logger.info('call-intake: scripted mode (no LLM — demo path)')
-    return { source, ...SCRIPTED, generatedBy: 'scripted', scripted: true }
+    const ref = input.demoRef
+    // Pick one of the varied demo scenarios (deterministically from the ref) so each
+    // run is a DIFFERENT believable opportunity, then stamp the unique ref onto the CRM
+    // entry (title suffix + tag) so the Notion row is unmistakably this visitor's.
+    const sc = pickScenario(ref)
+    const crmEntry: CrmEntry = ref
+      ? {
+          ...sc.crmEntry,
+          opportunityName: `${sc.crmEntry.opportunityName} · Demo ${ref}`,
+          tags: [...sc.crmEntry.tags, `demo-${ref}`],
+        }
+      : sc.crmEntry
+    return {
+      source,
+      extraction: sc.extraction,
+      crmEntry,
+      generatedBy: 'scripted',
+      scripted: true,
+      demoRef: ref,
+    }
   }
   try {
     const data = await completeJSON<{ extraction: Extraction; crmEntry: CrmEntry }>({
@@ -94,6 +95,7 @@ export async function run(
     return { source, extraction: data.extraction, crmEntry: data.crmEntry, generatedBy: 'llm' }
   } catch (e) {
     ctx.logger.info(`call-intake: LLM unavailable (${(e as Error).message}); using scripted draft`)
-    return { source, ...SCRIPTED, generatedBy: 'scripted' }
+    const sc = pickScenario()
+    return { source, extraction: sc.extraction, crmEntry: sc.crmEntry, generatedBy: 'scripted' }
   }
 }

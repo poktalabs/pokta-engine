@@ -179,13 +179,17 @@ export function mountDemo(app: Hono): void {
     // PUBLIC demo: force the no-LLM scripted path so a visitor can never drive an LLM
     // request (cost/prompt-injection). `scripted: true` threads call-intake → gate-1
     // → proposal-step; the real (LLM) Vino tenant pipeline never sets it.
+    // `demoRef` is a short per-run token stamped onto the CRM row so each demo write
+    // is a UNIQUE, recognizable Notion entry (not a repeated identical scripted one).
     const transcript = body.transcript.slice(0, 8000) // cap stored payload size
+    const demoRef = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase()
     const rootRunId = await dispatchRun('call-intake', {
       transcript,
       source: body.source ?? 'Granola call',
       scripted: true,
+      demoRef,
     })
-    return c.json({ rootRunId })
+    return c.json({ rootRunId, demoRef })
   })
 
   app.get('/demo/api/state/:rootRunId', async (c) => {
