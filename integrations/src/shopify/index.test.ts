@@ -81,7 +81,8 @@ describe('getCatalog', () => {
     expect(catalog.variantCount).toBe(3)
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe(`${CONFIG.baseUrl}/products.json?limit=250`)
+    // Defaults to the live storefront (status=active) at the 250 page cap.
+    expect(url).toBe(`${CONFIG.baseUrl}/products.json?limit=250&status=active`)
     expect(init.headers['X-Shopify-Access-Token']).toBe(CONFIG.accessToken)
   })
 
@@ -92,7 +93,71 @@ describe('getCatalog', () => {
 
     expect(catalog.products).toEqual([])
     expect(catalog.variantCount).toBe(0)
-    expect(fetchMock.mock.calls[0]![0]).toBe(`${CONFIG.baseUrl}/products.json?limit=50`)
+    expect(fetchMock.mock.calls[0]![0]).toBe(`${CONFIG.baseUrl}/products.json?limit=50&status=active`)
+  })
+
+  it('caps page size at the Shopify max of 250 even when asked for more', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ products: [] }))
+    const client = createShopifyClient(CONFIG)
+    await client.getCatalog({ limit: 1000 })
+    expect(fetchMock.mock.calls[0]![0]).toBe(`${CONFIG.baseUrl}/products.json?limit=250&status=active`)
+  })
+
+  it("status: 'any' omits the status filter; an explicit status is forwarded", async () => {
+    // Fresh Response per call (a Response body is single-use).
+    fetchMock.mockImplementation(async () => jsonResponse({ products: [] }))
+    const client = createShopifyClient(CONFIG)
+    await client.getCatalog({ status: 'any' })
+    expect(fetchMock.mock.calls[0]![0]).toBe(`${CONFIG.baseUrl}/products.json?limit=250`)
+
+    fetchMock.mockClear()
+    await client.getCatalog({ status: 'draft' })
+    expect(fetchMock.mock.calls[0]![0]).toBe(`${CONFIG.baseUrl}/products.json?limit=250&status=draft`)
+  })
+
+  it('auto-paginates by following the Link rel="next" cursor across pages', async () => {
+    const page2 = 'https://mi-pase-dev.myshopify.com/admin/api/2024-04/products.json?limit=250&page_info=CURSOR2'
+    const page3 = 'https://mi-pase-dev.myshopify.com/admin/api/2024-04/products.json?limit=250&page_info=CURSOR3'
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ products: [{ id: 1, title: 'A', variants: [{ id: 11, sku: 'A1', price: '1.00' }] }] }, 200, {
+          // realistic header: includes both previous + next on a middle page
+          Link: `<${page2}>; rel="next"`,
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ products: [{ id: 2, title: 'B', variants: [{ id: 21, sku: 'B1', price: '2.00' }] }] }, 200, {
+          Link: `<https://x/prev>; rel="previous", <${page3}>; rel="next"`,
+        })
+      )
+      .mockResolvedValueOnce(
+        // last page: no Link header → pagination stops
+        jsonResponse({ products: [{ id: 3, title: 'C', variants: [{ id: 31, sku: 'C1', price: '3.00' }] }] })
+      )
+
+    const client = createShopifyClient(CONFIG)
+    const catalog = await client.getCatalog()
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(catalog.products.map((p) => p.id)).toEqual([1, 2, 3])
+    expect(catalog.variantCount).toBe(3)
+    // Pages 2 and 3 follow the absolute cursor URL verbatim.
+    expect(fetchMock.mock.calls[1]![0]).toBe(page2)
+    expect(fetchMock.mock.calls[2]![0]).toBe(page3)
+  })
+
+  it('stops paginating at maxPages (runaway-cursor backstop)', async () => {
+    // Every page returns a next cursor; maxPages must bound the loop. Fresh
+    // Response per call (a Response body is single-use).
+    fetchMock.mockImplementation(async () =>
+      jsonResponse({ products: [{ id: 1, title: 'A', variants: [] }] }, 200, {
+        Link: `<${CONFIG.baseUrl}/products.json?limit=250&page_info=LOOP>; rel="next"`,
+      })
+    )
+    const client = createShopifyClient(CONFIG)
+    const catalog = await client.getCatalog({ maxPages: 3 })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(catalog.products).toHaveLength(3)
   })
 
   it('throws ShopifyApiError on a non-2xx read', async () => {
