@@ -173,7 +173,9 @@ export async function run(
   //    there is nothing to price, so let the failure mark the run failed (the
   //    per-SKU fail-soft applies to the ML competitor lookup, not the catalog).
   const shopify = ctx.integration('shopify')
-  const catalog: Catalog = await shopify.getCatalog()
+  // Price the live storefront only (status: 'active') and let the client
+  // auto-paginate — a single 250-cap page would silently drop a larger catalog.
+  const catalog: Catalog = await shopify.getCatalog({ status: 'active' })
 
   // 2. Build enriched identities (one per priced variant), apply scope + limit.
   let identities: ProductIdentity[] = []

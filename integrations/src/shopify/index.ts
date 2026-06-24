@@ -99,6 +99,23 @@ function parseRetryAfter(res: Response): number | undefined {
   return Number.isFinite(seconds) ? seconds : undefined
 }
 
+/**
+ * Parse the `rel="next"` cursor URL from a Shopify `Link` response header.
+ * Shopify Admin REST uses cursor pagination: each page response carries a
+ * `Link: <…page_info=…>; rel="next"` header until the last page (no `next`).
+ * The next URL is absolute and already encodes the original query context
+ * (status filter, page size) inside `page_info`, so we just follow it verbatim.
+ */
+function parseNextLink(res: Response): string | null {
+  const link = res.headers.get('link')
+  if (!link) return null
+  for (const part of link.split(',')) {
+    const m = part.match(/<([^>]+)>\s*;\s*rel="next"/)
+    if (m) return m[1]!
+  }
+  return null
+}
+
 /** Result of {@link ShopifyClient.getCatalog}. */
 export interface Catalog {
   products: ShopifyProduct[]
@@ -107,8 +124,21 @@ export interface Catalog {
 }
 
 export interface ShopifyClient {
-  /** Read products + their variants (paged at the Shopify max of 250). */
-  getCatalog(opts?: { limit?: number; signal?: AbortSignal }): Promise<Catalog>
+  /**
+   * Read products + their variants, AUTO-PAGINATING the full catalog (the
+   * Shopify Admin REST page cap is 250/request; this follows the `Link` cursor
+   * until exhausted). Defaults to `status: 'active'` so callers price the live
+   * storefront, not unpublished drafts.
+   */
+  getCatalog(opts?: {
+    /** Page size per request (Shopify max 250); all pages are fetched regardless. */
+    limit?: number
+    /** Product statuses to include. Defaults to `'active'`; `'any'` = no filter. */
+    status?: 'active' | 'archived' | 'draft' | 'any'
+    /** Safety cap on pages followed (default 50 → up to 12,500 products). */
+    maxPages?: number
+    signal?: AbortSignal
+  }): Promise<Catalog>
   /** PUT a single variant's price. Throws {@link ShopifyApiError} on non-2xx. */
   updateVariantPrice(
     update: VariantPriceUpdate,
@@ -130,10 +160,13 @@ export function createShopifyClient(config: ShopifyConfig): ShopifyClient {
     'Content-Type': 'application/json',
   }
 
-  async function shopifyFetch<T>(
+  // Low-level fetch that returns the raw Response (callers needing pagination
+  // headers use this). Throws ShopifyApiError on non-2xx. An absolute `endpoint`
+  // (the `Link` cursor URL) is used verbatim; a relative one is prefixed.
+  async function rawFetch(
     endpoint: string,
     init?: RequestInit & { signal?: AbortSignal }
-  ): Promise<T> {
+  ): Promise<Response> {
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`
     const res = await fetch(url, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } })
 
@@ -142,17 +175,39 @@ export function createShopifyClient(config: ShopifyConfig): ShopifyClient {
       throw new ShopifyApiError(res.status, body, parseRetryAfter(res))
     }
 
+    return res
+  }
+
+  async function shopifyFetch<T>(
+    endpoint: string,
+    init?: RequestInit & { signal?: AbortSignal }
+  ): Promise<T> {
+    const res = await rawFetch(endpoint, init)
     return res.json() as Promise<T>
   }
 
   return {
     async getCatalog(opts) {
-      const limit = opts?.limit ?? 250
-      const response = await shopifyFetch<{ products: ShopifyProduct[] }>(
-        `/products.json?limit=${limit}`,
-        { signal: opts?.signal }
-      )
-      const products = response.products ?? []
+      const pageSize = Math.min(opts?.limit ?? 250, 250)
+      const status = opts?.status ?? 'active'
+      const maxPages = opts?.maxPages ?? 50
+      // First request carries the filters; subsequent pages follow the `Link`
+      // cursor URL verbatim (Shopify forbids re-sending filters alongside
+      // page_info — the cursor already encodes them).
+      const params = new URLSearchParams({ limit: String(pageSize) })
+      if (status !== 'any') params.set('status', status)
+
+      let next: string | null = `/products.json?${params.toString()}`
+      const products: ShopifyProduct[] = []
+      let pages = 0
+      while (next && pages < maxPages) {
+        const res = await rawFetch(next, { signal: opts?.signal })
+        const body = (await res.json()) as { products?: ShopifyProduct[] }
+        products.push(...(body.products ?? []))
+        next = parseNextLink(res)
+        pages += 1
+      }
+
       const variantCount = products.reduce((sum, p) => sum + (p.variants?.length ?? 0), 0)
       return { products, variantCount }
     },
