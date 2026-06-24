@@ -132,6 +132,29 @@ describe('scoreProductMatch', () => {
     expect(score?.reason_code).toBe('forbidden_terms_found');
   });
 
+  it('does not treat a forbidden term as found when it is only a SUBSTRING of a title word', () => {
+    // `led` (forbidden, to exclude cheaper LED panels) must NOT match inside the
+    // word `OLED` — the correct premium product was being rejected by substring
+    // matching of the separator-stripped title.
+    const score = scoreProductMatch(
+      {
+        sku: 'OLED55C5ESA',
+        title: 'LG OLED55C5ESA Pantalla 55 pulgadas LG AI OLED evo C5 4K Smart TV',
+        search_query: 'LG OLED55C5ESA Pantalla 55 pulgadas OLED evo C5',
+        brand: 'LG',
+        model: 'OLED55C5ESA',
+        required_terms: ['pantalla', 'smart tv', 'oled evo', 'c5'],
+        forbidden_terms: ['lcd', 'led', 'qled', 'samsung', 'sony'],
+      },
+      'LG Pantalla 55 pulgadas OLED evo AI C5 4K SMART TV 2025'
+    );
+
+    expect(score?.signals.matched_forbidden_terms).not.toContain('led');
+    expect(score?.reason_code).not.toBe('forbidden_terms_found');
+    // multi-word required term `smart tv` still resolves via whole tokens
+    expect(score?.signals.missing_required_terms).not.toContain('smart tv');
+  });
+
   it('rejects motorcycle accessories even when the model appears', () => {
     const score = scoreProductMatch(
       {

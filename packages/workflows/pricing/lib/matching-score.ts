@@ -370,14 +370,25 @@ export function scoreProductMatch(target: MatchInput, matchedTitle: string | nul
     modelExactMatch === false &&
     matchedModelTokens.length > 0 &&
     sharedModelTokens.length === 0;
-  const requiredTerms = unique((target.required_terms ?? []).map(normalizedCompact).filter(Boolean));
+  // Match required/forbidden terms on WORD-TOKEN boundaries, not as substrings of
+  // the separator-stripped title. Substring matching false-positives short terms
+  // that live inside a larger word — e.g. forbidden `led` matched inside `oled`,
+  // rejecting the correct premium OLED product. A term matches iff every one of
+  // its tokens is present as a whole token in the candidate title (so multi-word
+  // terms like `barra de sonido` still require all parts).
+  const titleTokenSet = new Set(matchedTokens);
+  const termPresentInTitle = (term: string): boolean => {
+    const tokens = tokenizeForMatching(term);
+    return tokens.length > 0 && tokens.every((token) => titleTokenSet.has(token));
+  };
+  const requiredTerms = unique((target.required_terms ?? []).filter(Boolean));
   const forbiddenTerms = unique([
-    ...(target.forbidden_terms ?? []).map(normalizedCompact),
+    ...(target.forbidden_terms ?? []),
     ...globalForbiddenTermsFor(target),
   ].filter(Boolean));
-  const matchedRequiredTerms = requiredTerms.filter((term) => normalizedTitle.includes(term));
-  const missingRequiredTerms = requiredTerms.filter((term) => !normalizedTitle.includes(term));
-  const matchedForbiddenTerms = forbiddenTerms.filter((term) => normalizedTitle.includes(term));
+  const matchedRequiredTerms = requiredTerms.filter(termPresentInTitle);
+  const missingRequiredTerms = requiredTerms.filter((term) => !termPresentInTitle(term));
+  const matchedForbiddenTerms = forbiddenTerms.filter(termPresentInTitle);
   const acceptWithoutModel = target.accept_without_model === true;
 
   let score = Math.round(tokenOverlapRatio * 70);
