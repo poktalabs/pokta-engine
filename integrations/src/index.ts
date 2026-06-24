@@ -103,6 +103,11 @@ export {
   type MLTokenResponse,
 } from './mercado-libre/index.js'
 
+// ── Re-exports: competitor seam ──────────────────────────────────────────────
+
+export type { CompetitorSource, CompetitorQuote } from './competitor/types.js'
+export { mercadoLibreSource } from './mercado-libre/competitor-source.js'
+
 // ── Module factory re-exports ────────────────────────────────────────────────
 
 export { notionModule } from './notion/module.js'
