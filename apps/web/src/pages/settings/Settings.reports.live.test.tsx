@@ -73,6 +73,13 @@ function SettingsGate() {
   return <Settings />
 }
 
+/** Same ready-gate for ReportsPage (it reads useTenant(), which throws pre-ready). */
+function ReportsGate() {
+  const { status } = useTenantContext()
+  if (status !== 'ready') return <div data-testid="gate">{status}</div>
+  return <ReportsPage />
+}
+
 /** Reports-path predicate: any /v1/reports… request (query/id variants included). */
 function isReportsCall(path: string): boolean {
   return path.split('?')[0]?.startsWith('/v1/reports') ?? false
@@ -139,14 +146,18 @@ describe('SETTINGS — profile renders from the live TenantView; roster is an ho
 })
 
 describe('REPORTS — no-network ComingSoon on both routes (routes stay mounted)', () => {
-  it('renders the index ComingSoon and makes NO /v1/reports network call', async () => {
+  it('renders the index ComingSoon (non-mi-pase tenant) and makes NO /v1/reports network call', async () => {
     // Register only the tenant live path (TenantProvider still mounts under the
     // shared renderer). Reports itself has NO live path, so any /v1/reports fetch
-    // would surface as a captured request.
+    // would surface as a captured request. ReportsPage reads useTenant() (which
+    // throws until ready), so gate on ready exactly as production AppShell does.
+    // VINO has no curated reports → the honest ComingSoon path.
     mockLivePath('GET', '/v1/tenants/me', { status: 200, body: VINO_VIEW })
-    renderWithProviders(<ReportsPage />, { wrapInner: withRouter })
+    renderWithProviders(<ReportsGate />, { wrapInner: withRouter })
 
-    expect(screen.getByRole('heading', { name: 'Reports' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Reports' })).toBeInTheDocument(),
+    )
     expect(screen.getByText('No reports yet')).toBeInTheDocument()
 
     // Give any (forbidden) async fetch a tick to fire, then assert none did.
