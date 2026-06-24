@@ -5,11 +5,36 @@ import type {
   ShopifyClient,
   MercadoLibreClient,
   MLSearchResult,
+  CompetitorSource,
+  CompetitorQuote,
 } from '@pokta-engine/integrations'
 
 import { run } from './index'
 import type { DesiredRow, WorkflowStateStore } from './state-store'
 import { PRICING_WORKFLOW_ID } from './state-store'
+import { selectSkus } from '../pricing-apply/index'
+import { pricingApplyInputSchema } from '../pricing-apply/manifest'
+
+// ---- competitor-source fakes (multi-source seam) -------------------------
+
+function quote(over: Partial<CompetitorQuote> & Pick<CompetitorQuote, 'source'>): CompetitorQuote {
+  return {
+    source: over.source,
+    title: over.title ?? null,
+    priceMxn: over.priceMxn ?? null,
+    permalink: over.permalink ?? null,
+    productId: over.productId ?? null,
+    categoryId: over.categoryId ?? null,
+    candidatesChecked: over.candidatesChecked ?? 0,
+    failureReason: over.failureReason ?? null,
+    fetchedAt: over.fetchedAt ?? '',
+  }
+}
+
+/** A fake competitor source whose lookup is driven by the query string. */
+function sourceFake(id: string, lookup: (query: string) => CompetitorQuote | null): CompetitorSource {
+  return { id, lookup: async (query) => lookup(query) }
+}
 
 // ---- fakes ---------------------------------------------------------------
 
@@ -212,5 +237,207 @@ describe('pricing-draft run', () => {
       makeCtx(shopifyFake(), ml),
     )
     expect(out.summary.totalSkus).toBe(1)
+  })
+
+  it('aggregates min across ACCEPTED quotes from multiple sources (chosenSource = winner)', async () => {
+    // Two sources match ASKU (barcode 12345678 in title → accept). Amazon is the
+    // cheaper accepted quote → it must win competitor_min + chosenSource.
+    const mlSrc = sourceFake('mercado-libre', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'mercado-libre', title: 'Licuadora Oster 1200 12345678', priceMxn: 800 })
+        : quote({ source: 'mercado-libre', failureReason: 'no_catalog_match' }),
+    )
+    const amazonSrc = sourceFake('amazon-mx', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'amazon-mx', title: 'Licuadora Oster 1200 12345678 envio', priceMxn: 750 })
+        : quote({ source: 'amazon-mx', failureReason: 'no_result' }),
+    )
+
+    const out = await run(
+      {
+        consumerId: 'mi-pase',
+        costBySku: { ASKU: 500 },
+        __stateStore: fakeStore(),
+        __now: '2026-06-24T00:00:00.000Z',
+        __sources: [mlSrc, amazonSrc],
+      } as never,
+      makeCtx(shopifyFake(), {} as MercadoLibreClient),
+    )
+
+    const conf = out.confident.find((r) => r.sku === 'ASKU')!
+    expect(conf.competitorMinMxn).toBe(750) // min across accepted
+    expect(conf.chosenSource).toBe('amazon-mx') // cheaper accepted source won
+    expect(conf.suggestedPriceMxn).toBe(750) // priced to the chosen competitor
+    expect(conf.quotes).toHaveLength(2) // every source's quote carried
+    expect(conf.quotes.map((q) => q.source).sort()).toEqual(['amazon-mx', 'mercado-libre'])
+    for (const q of conf.quotes) {
+      expect(q.fetchedAt).toBe('2026-06-24T00:00:00.000Z') // single injected stamp
+      expect(q.matchConfidence).toBe('high')
+      expect(q.matchDecision).toBe('accept')
+    }
+
+    // Per-source yield is surfaced (ASKU priced by both; BSKU has no price).
+    expect(out.summary.bySource).toEqual({
+      'mercado-libre': { found: 1, accepted: 1 },
+      'amazon-mx': { found: 1, accepted: 1 },
+    })
+  })
+
+  it('a source that fails soft (returns null) never breaks the run; the other still prices', async () => {
+    const mlSrc = sourceFake('mercado-libre', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'mercado-libre', title: 'Licuadora Oster 1200 12345678', priceMxn: 800 })
+        : quote({ source: 'mercado-libre', failureReason: 'no_catalog_match' }),
+    )
+    // Amazon throws internally → its CompetitorSource contract is to resolve null.
+    const amazonSrc: CompetitorSource = {
+      id: 'amazon-mx',
+      lookup: async () => null,
+    }
+
+    const out = await run(
+      {
+        consumerId: 'mi-pase',
+        costBySku: { ASKU: 500 },
+        __stateStore: fakeStore(),
+        __sources: [mlSrc, amazonSrc],
+      } as never,
+      makeCtx(shopifyFake(), {} as MercadoLibreClient),
+    )
+
+    const conf = out.confident.find((r) => r.sku === 'ASKU')!
+    expect(conf.chosenSource).toBe('mercado-libre') // ML still priced the SKU
+    expect(conf.competitorMinMxn).toBe(800)
+    // amazon-mx is seeded in bySource (active source) but found nothing.
+    expect(out.summary.bySource['amazon-mx']).toEqual({ found: 0, accepted: 0 })
+  })
+
+  it('a source that THROWS (violates the fail-soft contract) is dropped, not propagated', async () => {
+    const mlSrc = sourceFake('mercado-libre', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'mercado-libre', title: 'Licuadora Oster 1200 12345678', priceMxn: 800 })
+        : quote({ source: 'mercado-libre', failureReason: 'no_catalog_match' }),
+    )
+    // A misbehaving source that REJECTS (not returns null) — the gather loop's
+    // own .catch must absorb it so the run still completes (defense-in-depth).
+    const rogueRejects: CompetitorSource = {
+      id: 'amazon-mx',
+      lookup: async () => {
+        throw new Error('boom: scraper blew up')
+      },
+    }
+    // ...and one that throws SYNCHRONOUSLY before returning a promise.
+    const rogueThrowsSync: CompetitorSource = {
+      id: 'sync-rogue',
+      lookup: (() => {
+        throw new Error('boom: sync throw')
+      }) as CompetitorSource['lookup'],
+    }
+
+    const out = await run(
+      {
+        consumerId: 'mi-pase',
+        costBySku: { ASKU: 500 },
+        __stateStore: fakeStore(),
+        __sources: [mlSrc, rogueRejects, rogueThrowsSync],
+      } as never,
+      makeCtx(shopifyFake(), {} as MercadoLibreClient),
+    )
+
+    // Run completed; ML still priced ASKU; the rogue sources contributed nothing.
+    const conf = out.confident.find((r) => r.sku === 'ASKU')!
+    expect(conf.chosenSource).toBe('mercado-libre')
+    expect(conf.competitorMinMxn).toBe(800)
+    expect(out.summary.bySource['amazon-mx']).toEqual({ found: 0, accepted: 0 })
+    expect(out.summary.bySource['sync-rogue']).toEqual({ found: 0, accepted: 0 })
+  })
+
+  it('excludes a CHEAPER but REJECTED quote from competitor_min (only accepted count)', async () => {
+    // ML accepts at 800; Amazon is cheaper (600) but its title does NOT match →
+    // rejected → must NOT win competitor_min. Chosen stays ML @ 800.
+    const mlSrc = sourceFake('mercado-libre', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'mercado-libre', title: 'Licuadora Oster 1200 12345678', priceMxn: 800 })
+        : quote({ source: 'mercado-libre', failureReason: 'no_catalog_match' }),
+    )
+    const amazonSrc = sourceFake('amazon-mx', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'amazon-mx', title: 'Producto totalmente distinto sin relacion', priceMxn: 600 })
+        : quote({ source: 'amazon-mx', failureReason: 'no_result' }),
+    )
+
+    const out = await run(
+      {
+        consumerId: 'mi-pase',
+        costBySku: { ASKU: 500 },
+        __stateStore: fakeStore(),
+        __sources: [mlSrc, amazonSrc],
+      } as never,
+      makeCtx(shopifyFake(), {} as MercadoLibreClient),
+    )
+
+    const conf = out.confident.find((r) => r.sku === 'ASKU')!
+    expect(conf.competitorMinMxn).toBe(800) // cheaper-but-rejected 600 excluded
+    expect(conf.chosenSource).toBe('mercado-libre')
+    // amazon found a price (yield) but it was not accepted.
+    expect(out.summary.bySource['amazon-mx']).toEqual({ found: 1, accepted: 0 })
+  })
+
+  it('ignores an ACCEPTED quote that carries no price (null priceMxn never wins)', async () => {
+    // Amazon "accepts" by title but reports no usable price → cannot be the min.
+    const mlSrc = sourceFake('mercado-libre', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'mercado-libre', title: 'Licuadora Oster 1200 12345678', priceMxn: 800 })
+        : quote({ source: 'mercado-libre', failureReason: 'no_catalog_match' }),
+    )
+    const amazonSrc = sourceFake('amazon-mx', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'amazon-mx', title: 'Licuadora Oster 1200 12345678', priceMxn: null })
+        : quote({ source: 'amazon-mx', failureReason: 'no_result' }),
+    )
+
+    const out = await run(
+      {
+        consumerId: 'mi-pase',
+        costBySku: { ASKU: 500 },
+        __stateStore: fakeStore(),
+        __sources: [mlSrc, amazonSrc],
+      } as never,
+      makeCtx(shopifyFake(), {} as MercadoLibreClient),
+    )
+
+    const conf = out.confident.find((r) => r.sku === 'ASKU')!
+    expect(conf.competitorMinMxn).toBe(800) // null-price accepted quote ignored
+    expect(conf.chosenSource).toBe('mercado-libre')
+    expect(out.summary.bySource['amazon-mx']).toEqual({ found: 0, accepted: 0 })
+  })
+
+  it('draft output is apply-chain compatible (validates pricingApplyInputSchema + selectSkus)', async () => {
+    const ml: MercadoLibreClient = {
+      configured: true,
+      search: vi.fn(async (query: string) =>
+        query.includes('Oster')
+          ? mlResult({ query, title: 'Licuadora Oster 1200 12345678', price_mxn: 800, item_id: 'MLM1' })
+          : mlResult({ query, failure_reason: 'no_catalog_match' }),
+      ),
+    }
+    const out = await run(
+      { consumerId: 'mi-pase', costBySku: { ASKU: 500 }, __stateStore: fakeStore() } as never,
+      makeCtx(shopifyFake(), ml),
+    )
+
+    // The worker feeds the WHOLE draft output as apply input — it must satisfy
+    // the apply schema and selectSkus must read the same ApplySku fields intact.
+    const parsed = pricingApplyInputSchema.parse(out)
+    const confidentSkus = selectSkus(parsed, 'pricing-apply-confident')
+    const flaggedSkus = selectSkus(parsed, 'pricing-apply-flagged')
+
+    expect(confidentSkus.map((s) => s.sku)).toEqual(['ASKU'])
+    expect(flaggedSkus.map((s) => s.sku)).toEqual(['BSKU'])
+    for (const s of [...confidentSkus, ...flaggedSkus]) {
+      expect(typeof s.sku).toBe('string')
+      expect(typeof s.shopifyVariantId).toBe('number')
+      expect('suggestedPriceMxn' in s).toBe(true)
+    }
   })
 })
