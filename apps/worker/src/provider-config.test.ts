@@ -49,6 +49,10 @@ const MIPASE_VARS = [
   'VINO_SHOPIFY_BASE_URL',
   'VINO_SHOPIFY_ACCESS_TOKEN',
   'VINO_ML_ACCESS_TOKEN',
+  // Amazon MX is opt-in per tenant (PR2) — these gate the scraping competitor source.
+  'MIPASE_AMAZON_MX_ENABLED',
+  'MIPASE_AMAZON_MX_PROXY_URL',
+  'MIPASE_AMAZON_MX_USER_AGENT',
 ] as const
 
 const saved: Record<string, string | undefined> = {}
@@ -122,6 +126,33 @@ describe('registerEngineProviders (T9)', () => {
 
     expect(() => makeIntegrationResolver('unknown-tenant')('shopify')).toThrow(/not configured/i)
     expect(() => makeIntegrationResolver('unknown-tenant')('mercado-libre')).toThrow(/not configured/i)
+  })
+
+  it('registers the amazon-mx factory (PR2 competitor source)', () => {
+    expect(hasProvider('amazon-mx')).toBe(true)
+  })
+
+  it('amazon-mx is DISABLED by default → "not configured" (source omitted)', () => {
+    // No MIPASE_AMAZON_MX_ENABLED set → the factory throws → the workflow omits it.
+    expect(() => makeIntegrationResolver('mi-pase')('amazon-mx')).toThrow(
+      /not configured for consumer 'mi-pase'/i,
+    )
+  })
+
+  it('amazon-mx resolves a CompetitorSource when explicitly enabled', () => {
+    process.env.MIPASE_AMAZON_MX_ENABLED = 'true'
+    const src = makeIntegrationResolver('mi-pase')('amazon-mx')
+    expect(src).toBeDefined()
+    expect((src as { id: string }).id).toBe('amazon-mx')
+    expect(typeof (src as { lookup: unknown }).lookup).toBe('function')
+  })
+
+  it('enabling amazon-mx does NOT require shopify/ML env (per-provider isolation)', () => {
+    // Amazon enabled, NOTHING else configured — amazon still resolves, shopify/ML
+    // still fail-soft. Asking for amazon-mx never reads a *_SHOPIFY_*/*_ML_* var.
+    process.env.MIPASE_AMAZON_MX_ENABLED = '1'
+    expect(makeIntegrationResolver('mi-pase')('amazon-mx')).toBeDefined()
+    expect(() => makeIntegrationResolver('mi-pase')('shopify')).toThrow(/not configured/i)
   })
 
   it('cleans up after itself (registry restored for downstream tests)', () => {

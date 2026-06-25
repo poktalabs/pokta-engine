@@ -33,6 +33,8 @@ import {
   type ShopifyConfig,
   createMercadoLibreClient,
   type MercadoLibreConfig,
+  createAmazonMxSource,
+  type AmazonMxConfig,
   registerProvider,
 } from '@pokta-engine/integrations'
 // The tenant registry is the SOURCE OF TRUTH for a tenant's env secret-prefix now
@@ -154,7 +156,29 @@ function mercadoLibreConfigFor(consumerId: string): MercadoLibreConfig {
 }
 
 /**
- * Register both M1 provider factories with the resolver. Idempotent (last
+ * Read ONLY this tenant's Amazon MX config (or throw → source omitted). Opt-in
+ * per tenant: the scraping source is DISABLED unless `${prefix}_AMAZON_MX_ENABLED`
+ * is explicitly truthy (it's ToS-gray + low-yield from a datacenter IP). When off
+ * the factory throws, the resolver wraps it "not configured", and the workflow's
+ * `try { ctx.integration('amazon-mx') }` simply omits it (fail-soft, plan §3.4).
+ */
+function amazonMxConfigFor(consumerId: string): AmazonMxConfig {
+  const prefix = prefixFor(consumerId)
+  if (!prefix) throw new Error(`no registry secret_prefix resolved for consumer '${consumerId}' (Amazon MX)`)
+  const enabledRaw = readEnv(`${prefix}_AMAZON_MX_ENABLED`)
+  const enabled = enabledRaw === 'true' || enabledRaw === '1'
+  if (!enabled) {
+    throw new Error(`Amazon MX disabled for '${consumerId}' (set ${prefix}_AMAZON_MX_ENABLED=true to enable)`)
+  }
+  return {
+    enabled,
+    proxyUrl: readEnv(`${prefix}_AMAZON_MX_PROXY_URL`),
+    userAgent: readEnv(`${prefix}_AMAZON_MX_USER_AGENT`),
+  }
+}
+
+/**
+ * Register the provider factories with the resolver. Idempotent (last
  * registration wins), so it is safe to call more than once. Importing this
  * module runs it automatically at worker boot.
  */
@@ -163,6 +187,8 @@ export function registerEngineProviders(): void {
   registerProvider('mercado-libre', (consumerId: string) =>
     createMercadoLibreClient(mercadoLibreConfigFor(consumerId)),
   )
+  // Amazon MX is opt-in per tenant (off by default) — the scraping competitor source.
+  registerProvider('amazon-mx', (consumerId: string) => createAmazonMxSource(amazonMxConfigFor(consumerId)))
 }
 
 // Side-effect on import: wire the factories. The worker imports this module for

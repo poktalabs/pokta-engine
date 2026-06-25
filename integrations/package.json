@@ -11,8 +11,9 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@pokta-engine/contract": "workspace:*",
     "@notionhq/client": "^2.2.15",
+    "@pokta-engine/contract": "workspace:*",
+    "cheerio": "^1.2.0",
     "resend": "^4.0.1"
   },
   "devDependencies": {

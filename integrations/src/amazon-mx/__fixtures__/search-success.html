@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es-mx">
+<head><title>Amazon.com.mx: licuadora oster 1200</title></head>
+<body>
+<div class="s-main-slot s-result-list">
+
+  <!-- A sponsored-but-unrelated card with a price (should lose on overlap). -->
+  <div data-component-type="s-search-result" data-asin="B000UNRELATED">
+    <h2><a href="/dp/B000UNRELATED"><span>Cafetera Express Generica 900W</span></a></h2>
+    <div class="a-price"><span class="a-offscreen">$499.00</span><span aria-hidden="true">$499<sup>00</sup></span></div>
+  </div>
+
+  <!-- The best match: highest title-token overlap with the query + has price. -->
+  <div data-component-type="s-search-result" data-asin="B07OSTER12">
+    <h2><a href="/Licuadora-Oster-1200/dp/B07OSTER12"><span>Licuadora Oster 1200 Watts Vaso Vidrio</span></a></h2>
+    <div class="a-price">
+      <span class="a-offscreen">$1,249.00</span>
+      <span aria-hidden="true">$1,249<sup>00</sup></span>
+    </div>
+  </div>
+
+  <!-- A matching card WITHOUT a price (out of stock) → must be skipped. -->
+  <div data-component-type="s-search-result" data-asin="B07NOPRICE">
+    <h2><a href="/dp/B07NOPRICE"><span>Licuadora Oster 1200 Reacondicionada</span></a></h2>
+    <div class="a-section">No disponible</div>
+  </div>
+
+  <!-- A non-result widget that shares no data-component-type → ignored. -->
+  <div class="s-widget">Patrocinado</div>
+
+</div>
+</body>
+</html>

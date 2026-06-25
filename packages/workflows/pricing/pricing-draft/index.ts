@@ -282,6 +282,14 @@ export async function run(
     } catch (e) {
       ctx.logger.info(`pricing-draft: mercado-libre unavailable (${(e as Error).message}); skipping`)
     }
+    // Amazon MX is opt-in per tenant: ctx.integration throws when disabled/
+    // unconfigured → the source is simply omitted (fail-soft, plan §3.4). When
+    // enabled it resolves to a CompetitorSource directly (no adapter needed).
+    try {
+      sources.push(ctx.integration('amazon-mx'))
+    } catch (e) {
+      ctx.logger.info(`pricing-draft: amazon-mx unavailable (${(e as Error).message}); skipping`)
+    }
   }
 
   // 4. Paced, concurrent-per-SKU competitor lookups (fail-soft per source per SKU).
