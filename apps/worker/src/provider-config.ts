@@ -170,10 +170,22 @@ function amazonMxConfigFor(consumerId: string): AmazonMxConfig {
   if (!enabled) {
     throw new Error(`Amazon MX disabled for '${consumerId}' (set ${prefix}_AMAZON_MX_ENABLED=true to enable)`)
   }
+  // Polite throttle by default (scraping from one IP burst-trips Amazon's bot
+  // detection — measured). Overridable per tenant; explicit 0 disables it.
+  const minRaw = readEnv(`${prefix}_AMAZON_MX_MIN_INTERVAL_MS`)
+  const jitRaw = readEnv(`${prefix}_AMAZON_MX_JITTER_MS`)
+  // Optional Firecrawl backend (per-tenant override, else the global key). When
+  // present, Firecrawl owns the proxy/anti-bot layer, so the local throttle is
+  // unnecessary — drop it to 0 unless the tenant explicitly set one.
+  const firecrawlKey = readEnv(`${prefix}_FIRECRAWL_API_KEY`) ?? readEnv('FIRECRAWL_API_KEY')
+  const defaultInterval = firecrawlKey ? 0 : 1500
   return {
     enabled,
     proxyUrl: readEnv(`${prefix}_AMAZON_MX_PROXY_URL`),
     userAgent: readEnv(`${prefix}_AMAZON_MX_USER_AGENT`),
+    minIntervalMs: minRaw != null ? Number(minRaw) : defaultInterval,
+    jitterMs: jitRaw != null ? Number(jitRaw) : firecrawlKey ? 0 : 1000,
+    firecrawlKey,
   }
 }
 

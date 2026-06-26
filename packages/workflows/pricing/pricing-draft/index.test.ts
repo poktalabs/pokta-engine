@@ -412,6 +412,60 @@ describe('pricing-draft run', () => {
     expect(out.summary.bySource['amazon-mx']).toEqual({ found: 0, accepted: 0 })
   })
 
+  it('rejects an accessory competitor via the accessory blocklist (a "Funda" is not priced against)', async () => {
+    const mlSrc = sourceFake('mercado-libre', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'mercado-libre', title: 'Licuadora Oster 1200 12345678', priceMxn: 800 })
+        : quote({ source: 'mercado-libre', failureReason: 'no_catalog_match' }),
+    )
+    // Amazon returns a cheap accessory (a case) whose title contains "Funda".
+    const amazonSrc = sourceFake('amazon-mx', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'amazon-mx', title: 'Funda protectora para Licuadora Oster 1200', priceMxn: 50 })
+        : quote({ source: 'amazon-mx', failureReason: 'no_result' }),
+    )
+
+    const out = await run(
+      {
+        consumerId: 'mi-pase',
+        costBySku: { ASKU: 500 },
+        __stateStore: fakeStore(),
+        __sources: [mlSrc, amazonSrc],
+      } as never,
+      makeCtx(shopifyFake(), {} as MercadoLibreClient),
+    )
+
+    const asku = [...out.confident, ...out.flagged].find((r) => r.sku === 'ASKU')!
+    // The $50 "Funda" must NOT win — accessory rejected; ML's real $800 is chosen.
+    expect(asku.chosenSource).toBe('mercado-libre')
+    expect(asku.competitorMinMxn).toBe(800)
+    expect(out.summary.bySource['amazon-mx']).toEqual({ found: 1, accepted: 0 })
+  })
+
+  it('applies per-SKU curated forbidden terms (matchHintsBySku)', async () => {
+    // A titled ML match that a curated forbidden term ('samsung') must reject.
+    const mlSrc = sourceFake('mercado-libre', (query) =>
+      query.includes('Oster')
+        ? quote({ source: 'mercado-libre', title: 'Licuadora Oster 1200 Samsung Edition', priceMxn: 800 })
+        : quote({ source: 'mercado-libre', failureReason: 'no_catalog_match' }),
+    )
+
+    const out = await run(
+      {
+        consumerId: 'mi-pase',
+        costBySku: { ASKU: 500 },
+        __stateStore: fakeStore(),
+        __sources: [mlSrc],
+        matchHintsBySku: { ASKU: { forbidden: ['samsung'] } },
+      } as never,
+      makeCtx(shopifyFake(), {} as MercadoLibreClient),
+    )
+
+    const asku = [...out.confident, ...out.flagged].find((r) => r.sku === 'ASKU')!
+    expect(asku.chosenSource).toBeNull() // curated forbidden term rejected the match
+    expect(asku.matchDecision).not.toBe('accept')
+  })
+
   it('draft output is apply-chain compatible (validates pricingApplyInputSchema + selectSkus)', async () => {
     const ml: MercadoLibreClient = {
       configured: true,

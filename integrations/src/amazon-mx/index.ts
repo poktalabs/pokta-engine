@@ -33,6 +33,28 @@ export interface AmazonMxConfig {
   proxyUrl?: string
   /** Optional UA override (defaults to a realistic desktop Chrome UA). */
   userAgent?: string
+  /**
+   * Minimum gap (ms) the source enforces between its OWN requests — a politeness
+   * throttle so a multi-SKU sweep doesn't burst and trip Amazon's bot detection.
+   * Default 0 (no throttle; tests stay instant). The worker sets a real value.
+   */
+  minIntervalMs?: number
+  /**
+   * Random extra 0..jitterMs added to each gap so requests don't fire on a fixed
+   * cadence (a burst tell). Default 0. Only meaningful with {@link minIntervalMs}.
+   */
+  jitterMs?: number
+  /**
+   * When set, fetch the page THROUGH Firecrawl (api.firecrawl.dev) instead of a
+   * direct request — Firecrawl owns the proxy + anti-bot layer that a datacenter
+   * IP gets blocked on (measured). The parser is unchanged; only the fetch swaps.
+   * Absent ⇒ direct fetch.
+   */
+  firecrawlKey?: string
+  /** Firecrawl proxy mode for the scrape. Default 'stealth' (best anti-bot, 5 credits). */
+  firecrawlProxy?: 'basic' | 'stealth' | 'auto'
+  /** Firecrawl scrape timeout (ms). Default 60000. */
+  firecrawlTimeoutMs?: number
 }
 
 /** Why a lookup produced no usable quote — surfaced by the PURE parser for probes. */
@@ -202,27 +224,84 @@ export function createAmazonMxSource(config: AmazonMxConfig): CompetitorSource {
   if (!config.enabled) {
     throw new Error('Amazon MX not configured (set enabled:true to use the scraping source)')
   }
-  const origin = config.proxyUrl?.replace(/\/+$/, '') ?? AMAZON_MX_ORIGIN
+  const directOrigin = config.proxyUrl?.replace(/\/+$/, '') ?? AMAZON_MX_ORIGIN
   const userAgent = config.userAgent ?? DEFAULT_USER_AGENT
+  const minIntervalMs = Math.max(0, config.minIntervalMs ?? 0)
+  const jitterMs = Math.max(0, config.jitterMs ?? 0)
+  const firecrawlKey = config.firecrawlKey
+  const firecrawlProxy = config.firecrawlProxy ?? 'stealth'
+  const firecrawlTimeoutMs = config.firecrawlTimeoutMs ?? 60000
+  // Through Firecrawl we ask for the REAL amazon.com.mx URL (Firecrawl is the
+  // proxy); direct mode honors any proxyUrl origin override. The chosen origin is
+  // also the permalink base the parser uses.
+  const scrapeOrigin = firecrawlKey ? AMAZON_MX_ORIGIN : directOrigin
+
+  /**
+   * Fetch the search-results HTML for a query — via Firecrawl when a key is set,
+   * else a direct request. Returns the HTML string, or null on any failure
+   * (non-200 / Firecrawl error / network) so the source stays fail-soft.
+   */
+  async function fetchHtml(query: string, signal?: AbortSignal): Promise<string | null> {
+    const target = amazonSearchUrl(query, scrapeOrigin)
+    if (firecrawlKey) {
+      const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${firecrawlKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: target,
+          formats: ['rawHtml'],
+          location: { country: 'MX', languages: ['es-MX'] },
+          proxy: firecrawlProxy,
+          timeout: firecrawlTimeoutMs,
+        }),
+        signal,
+      })
+      if (!res.ok) return null
+      const body = (await res.json()) as {
+        success?: boolean
+        data?: { rawHtml?: string; html?: string }
+      }
+      if (!body.success) return null
+      return body.data?.rawHtml || body.data?.html || null
+    }
+    const res = await fetch(target, {
+      headers: {
+        'User-Agent': userAgent,
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'es-MX,es;q=0.9',
+      },
+      signal,
+    })
+    // Non-200 (incl. 503 Robot Check) → treat as blocked/unavailable.
+    if (!res.ok) return null
+    return await res.text()
+  }
+
+  // Politeness throttle: serialize this source's requests so consecutive Amazon
+  // hits are >= minIntervalMs (+ jitter) apart, even when the caller queries fast.
+  // `nextAllowedAt` reserves the next slot, so it stays correct under concurrent
+  // calls too. Default 0 → no wait (unit tests stay instant).
+  let nextAllowedAt = 0
+  async function throttle(): Promise<void> {
+    if (minIntervalMs === 0 && jitterMs === 0) return
+    const now = Date.now()
+    const start = Math.max(now, nextAllowedAt)
+    const gap = minIntervalMs + (jitterMs > 0 ? Math.floor(Math.random() * jitterMs) : 0)
+    nextAllowedAt = start + gap // reserve this slot before awaiting
+    const waitMs = start - now
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs))
+  }
 
   return {
     id: AMAZON_MX_SOURCE_ID,
     async lookup(query, opts): Promise<CompetitorQuote | null> {
       try {
-        const res = await fetch(amazonSearchUrl(query, origin), {
-          headers: {
-            'User-Agent': userAgent,
-            Accept: 'text/html,application/xhtml+xml',
-            'Accept-Language': 'es-MX,es;q=0.9',
-          },
-          signal: opts?.signal,
-        })
-        // Non-200 (incl. 503 Robot Check) → treat as blocked/unavailable.
-        if (!res.ok) return null
-        const html = await res.text()
-        return parseAmazonSearchHtml(html, query, origin).quote
+        await throttle()
+        const html = await fetchHtml(query, opts?.signal)
+        if (html == null) return null
+        return parseAmazonSearchHtml(html, query, scrapeOrigin).quote
       } catch {
-        return null // network error / abort → fail-soft
+        return null // network error / abort / Firecrawl error → fail-soft
       }
     },
   }

@@ -157,4 +157,84 @@ describe('amazon-mx lookup (fail-soft fetch shell)', () => {
     await src.lookup('q')
     expect(fetchMock.mock.calls[0]![0]).toBe('https://proxy.example/s?k=q')
   })
+
+  it('does NOT throttle by default (minIntervalMs 0) — back-to-back lookups fire immediately', async () => {
+    fetchMock.mockResolvedValue(htmlResponse(fixture('search-no-result')))
+    const src = createAmazonMxSource({ enabled: true })
+    await src.lookup('a')
+    await src.lookup('b')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('amazon-mx politeness throttle', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('spaces consecutive requests by >= minIntervalMs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => fixture('search-no-result') })
+    vi.stubGlobal('fetch', fetchMock)
+    const src = createAmazonMxSource({ enabled: true, minIntervalMs: 1000, jitterMs: 0 })
+
+    // First request fires with no wait.
+    const p1 = src.lookup('a')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await p1
+
+    // Second request is held until minIntervalMs has elapsed.
+    const p2 = src.lookup('b')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchMock).toHaveBeenCalledTimes(1) // throttled, not yet fired
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(fetchMock).toHaveBeenCalledTimes(2) // released after the gap
+    await p2
+  })
+})
+
+describe('amazon-mx via Firecrawl backend', () => {
+  const fetchMock = vi.fn()
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('routes through Firecrawl (POST /v1/scrape) and parses the returned rawHtml', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { rawHtml: fixture('search-success') } }),
+    })
+    const src = createAmazonMxSource({ enabled: true, firecrawlKey: 'fc-test' })
+    const quote = await src.lookup('licuadora oster 1200')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('https://api.firecrawl.dev/v1/scrape')
+    expect(init.headers.Authorization).toBe('Bearer fc-test')
+    const body = JSON.parse(init.body)
+    expect(body.url).toBe('https://www.amazon.com.mx/s?k=licuadora%20oster%201200') // the REAL amazon URL
+    expect(body.formats).toEqual(['rawHtml'])
+    expect(body.proxy).toBe('stealth')
+    // the rawHtml was parsed into a real quote
+    expect(quote!.source).toBe('amazon-mx')
+    expect(quote!.priceMxn).toBe(1249)
+  })
+
+  it('fails soft to null when Firecrawl returns success:false', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: false, error: 'scrape failed' }) })
+    const src = createAmazonMxSource({ enabled: true, firecrawlKey: 'fc-test' })
+    await expect(src.lookup('q')).resolves.toBeNull()
+  })
+
+  it('fails soft to null on a Firecrawl non-200 (e.g. 402 out of credits)', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 402, json: async () => ({}) })
+    const src = createAmazonMxSource({ enabled: true, firecrawlKey: 'fc-test' })
+    await expect(src.lookup('q')).resolves.toBeNull()
+  })
 })
