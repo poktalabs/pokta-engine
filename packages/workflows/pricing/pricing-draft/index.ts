@@ -172,17 +172,22 @@ function searchQueryFor(identity: ProductIdentity): string {
 /**
  * Generic accessory / non-product terms that almost never describe the actual
  * device being priced — third-party cases, screen protectors, mounts, straps,
- * and used/generic listings. Added to EVERY match's forbidden terms (word-boundary
+ * and replica/used listings. Added to EVERY match's forbidden terms (word-boundary
  * matched) so a scraped "Funda para X" / "Protector de Y" competitor is rejected
  * rather than priced against. Matters most for Amazon, whose search returns far
- * more accessory noise than ML's catalog. Conservative on purpose — only terms
- * that are not themselves products in this catalog.
+ * more accessory noise than ML's catalog.
+ *
+ * Deliberately NOUNS only — accessory products. Risky ADJECTIVES are excluded
+ * because they false-positive on legitimate products: "compatible" (e.g. "Bocina
+ * compatible con Alexa" is a real speaker) and "genérico" (a generic product is
+ * still a product). Condition/counterfeit markers (replica/usado) stay — a used
+ * or replica listing is not a like-for-like new competitor.
  */
 export const ACCESSORY_FORBIDDEN_TERMS = [
   'funda', 'fundas', 'case', 'carcasa', 'cover', 'protector', 'mica', 'pelicula',
   'película', 'cristal templado', 'soporte', 'tripie', 'tripié', 'montura',
-  'correa', 'strap', 'pulsera', 'estuche', 'forro', 'compatible', 'generico',
-  'genérico', 'replica', 'réplica', 'usado', 'reacondicionado', 'refurbished',
+  'correa', 'strap', 'pulsera', 'estuche', 'forro', 'replica', 'réplica',
+  'usado', 'reacondicionado', 'refurbished',
 ]
 
 /** Per-SKU curated match hints (the client's palabras_prohibidas / requeridas). */
