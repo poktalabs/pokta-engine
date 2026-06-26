@@ -133,6 +133,13 @@ type PricingDraftRunInput = PricingDraftInput & {
    * CONFIDENT once the cost seam is wired.
    */
   costBySku?: Record<string, number | null>
+  /**
+   * Per-SKU curated match hints (the client's `palabras_prohibidas` / requeridas),
+   * keyed by SKU. Merged into each SKU's forbidden/required terms on top of the
+   * generic {@link ACCESSORY_FORBIDDEN_TERMS}. The Shopify catalog read carries no
+   * such terms today, so this is how curated exclusions reach the matcher.
+   */
+  matchHintsBySku?: Record<string, MatchHints>
   /** Test seam: inject a fake state store (the worker never sets this). */
   __stateStore?: WorkflowStateStore
   /**
@@ -162,8 +169,35 @@ function searchQueryFor(identity: ProductIdentity): string {
     .trim()
 }
 
+/**
+ * Generic accessory / non-product terms that almost never describe the actual
+ * device being priced — third-party cases, screen protectors, mounts, straps,
+ * and replica/used listings. Added to EVERY match's forbidden terms (word-boundary
+ * matched) so a scraped "Funda para X" / "Protector de Y" competitor is rejected
+ * rather than priced against. Matters most for Amazon, whose search returns far
+ * more accessory noise than ML's catalog.
+ *
+ * Deliberately NOUNS only — accessory products. Risky ADJECTIVES are excluded
+ * because they false-positive on legitimate products: "compatible" (e.g. "Bocina
+ * compatible con Alexa" is a real speaker) and "genérico" (a generic product is
+ * still a product). Condition/counterfeit markers (replica/usado) stay — a used
+ * or replica listing is not a like-for-like new competitor.
+ */
+export const ACCESSORY_FORBIDDEN_TERMS = [
+  'funda', 'fundas', 'case', 'carcasa', 'cover', 'protector', 'mica', 'pelicula',
+  'película', 'cristal templado', 'soporte', 'tripie', 'tripié', 'montura',
+  'correa', 'strap', 'pulsera', 'estuche', 'forro', 'replica', 'réplica',
+  'usado', 'reacondicionado', 'refurbished',
+]
+
+/** Per-SKU curated match hints (the client's palabras_prohibidas / requeridas). */
+export interface MatchHints {
+  forbidden?: string[]
+  required?: string[]
+}
+
 /** Build the title-based match target for a SKU (reused to score every quote). */
-function buildMatchInput(identity: ProductIdentity): MatchInput {
+function buildMatchInput(identity: ProductIdentity, hints?: MatchHints): MatchInput {
   return {
     sku: identity.sku,
     title: identity.title_shopify,
@@ -174,8 +208,14 @@ function buildMatchInput(identity: ProductIdentity): MatchInput {
     barcode: identity.barcode,
     ean: identity.ean,
     gtin: identity.gtin,
-    required_terms: identity.palabras_requeridas,
-    forbidden_terms: identity.palabras_prohibidas,
+    required_terms: [...identity.palabras_requeridas, ...(hints?.required ?? [])],
+    // identity terms (empty from Shopify today) + generic accessory blocklist +
+    // the client's curated per-SKU exclusions when supplied.
+    forbidden_terms: [
+      ...identity.palabras_prohibidas,
+      ...ACCESSORY_FORBIDDEN_TERMS,
+      ...(hints?.forbidden ?? []),
+    ],
   }
 }
 
@@ -282,6 +322,14 @@ export async function run(
     } catch (e) {
       ctx.logger.info(`pricing-draft: mercado-libre unavailable (${(e as Error).message}); skipping`)
     }
+    // Amazon MX is opt-in per tenant: ctx.integration throws when disabled/
+    // unconfigured → the source is simply omitted (fail-soft, plan §3.4). When
+    // enabled it resolves to a CompetitorSource directly (no adapter needed).
+    try {
+      sources.push(ctx.integration('amazon-mx'))
+    } catch (e) {
+      ctx.logger.info(`pricing-draft: amazon-mx unavailable (${(e as Error).message}); skipping`)
+    }
   }
 
   // 4. Paced, concurrent-per-SKU competitor lookups (fail-soft per source per SKU).
@@ -303,7 +351,7 @@ export async function run(
 
   for (const identity of identities) {
     const quotes = competitors.get(identity.sku) ?? []
-    const matchInput = buildMatchInput(identity)
+    const matchInput = buildMatchInput(identity, input.matchHintsBySku?.[identity.sku])
 
     // Score every quote independently — a quote without a title can't be matched.
     const scored = quotes.map((quote) => {

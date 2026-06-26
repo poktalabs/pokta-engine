@@ -19,6 +19,7 @@ import { notionModule } from './notion/module.js'
 import { resendModule } from './resend/module.js'
 import { shopifyModule } from './shopify/module.js'
 import { mercadoLibreModule } from './mercado-libre/module.js'
+import { amazonMxModule } from './amazon-mx/module.js'
 
 // ── Registry (mirrors the workflow registry) ─────────────────────────────────
 
@@ -27,6 +28,7 @@ const modules: IntegrationModule[] = [
   resendModule as IntegrationModule,
   shopifyModule as IntegrationModule,
   mercadoLibreModule as IntegrationModule,
+  amazonMxModule as IntegrationModule,
 ]
 
 export const registry: ReadonlyMap<string, IntegrationModule> = new Map(
@@ -108,17 +110,32 @@ export {
 export type { CompetitorSource, CompetitorQuote } from './competitor/types.js'
 export { mercadoLibreSource } from './mercado-libre/competitor-source.js'
 
+// ── Re-exports: amazon-mx (competitor source) ────────────────────────────────
+
+export {
+  createAmazonMxSource,
+  parseAmazonSearchHtml,
+  parseMxnPrice,
+  amazonSearchUrl,
+  AMAZON_MX_SOURCE_ID,
+  type AmazonMxConfig,
+  type AmazonParseResult,
+  type AmazonParseReason,
+} from './amazon-mx/index.js'
+
 // ── Module factory re-exports ────────────────────────────────────────────────
 
 export { notionModule } from './notion/module.js'
 export { resendModule } from './resend/module.js'
 export { shopifyModule } from './shopify/module.js'
 export { mercadoLibreModule } from './mercado-libre/module.js'
+export { amazonMxModule } from './amazon-mx/module.js'
 
 // ── Contract type registry (OWNED here, D2) ──────────────────────────────────
 
 import type { ShopifyClient } from './shopify/index.js'
 import type { MercadoLibreClient } from './mercado-libre/index.js'
+import type { CompetitorSource } from './competitor/types.js'
 
 /**
  * Declaration merging (D2): teach the contract's `IntegrationClients` map the
@@ -132,5 +149,7 @@ declare module '@pokta-engine/contract' {
   interface IntegrationClients {
     shopify: ShopifyClient
     'mercado-libre': MercadoLibreClient
+    /** The Amazon MX competitor source (PR2). `ctx.integration('amazon-mx')`. */
+    'amazon-mx': CompetitorSource
   }
 }
